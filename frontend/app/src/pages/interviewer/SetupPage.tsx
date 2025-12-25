@@ -13,7 +13,8 @@ import {
     ArrowRight,
     CheckCircle,
     Cog,
-    Clock
+    Clock,
+    TrendingUp
 } from 'lucide-react';
 
 interface Meeting {
@@ -165,43 +166,57 @@ export function SetupPage() {
                                 </div>
 
                                 <div className="flex items-center gap-2 pt-4 border-t border-gray-50">
-                                    <button
-                                        onClick={() => navigate(`/interviewer/meeting/${meeting.id}/setup`)}
-                                        className="flex-1 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors flex items-center justify-center gap-2"
-                                        title="Configure"
-                                    >
-                                        <Cog className="w-4 h-4" /> Configure
-                                    </button>
+                                    {meeting.active && (
+                                        <>
+                                            <button
+                                                onClick={() => navigate(`/interviewer/meeting/${meeting.id}/setup`)}
+                                                className="flex-1 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors flex items-center justify-center gap-2"
+                                                title="Configure"
+                                            >
+                                                <Cog className="w-4 h-4" /> Configure
+                                            </button>
 
-                                    <div className="w-px h-8 bg-gray-100"></div>
+                                            <div className="w-px h-8 bg-gray-100"></div>
 
-                                    <button
-                                        onClick={() => copyMeetingLink(meeting.id)}
-                                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${copiedId === meeting.id ? 'text-green-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                            }`}
-                                        title="Copy Link"
-                                    >
-                                        {copiedId === meeting.id ? <CheckCircle className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                                        {copiedId === meeting.id ? 'Copied' : 'Share'}
-                                    </button>
+                                            <button
+                                                onClick={() => copyMeetingLink(meeting.id)}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${copiedId === meeting.id ? 'text-green-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                                    }`}
+                                                title="Copy Link"
+                                            >
+                                                {copiedId === meeting.id ? <CheckCircle className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                                                {copiedId === meeting.id ? 'Copied' : 'Share'}
+                                            </button>
 
-                                    <div className="w-px h-8 bg-gray-100"></div>
+                                            <div className="w-px h-8 bg-gray-100"></div>
+                                        </>
+                                    )}
 
                                     <button
                                         onClick={() => handleDeleteMeeting(meeting.id)}
-                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        className={`p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ${!meeting.active ? 'ml-auto' : ''}`}
                                         title="Delete"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
-                                <button
-                                    onClick={() => navigate(`/meeting/${meeting.id}`)}
-                                    className="w-full mt-3 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <span>Join Room</span>
-                                    <ArrowRight className="w-4 h-4" />
-                                </button>
+                                {meeting.active ? (
+                                    <button
+                                        onClick={() => navigate(`/meeting/${meeting.id}`)}
+                                        className="w-full mt-3 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <span>Join Room</span>
+                                        <ArrowRight className="w-4 h-4" />
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => navigate(`/interviewer/report/${meeting.id}`)}
+                                        className="w-full mt-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <span>View Insights</span>
+                                        <TrendingUp className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>

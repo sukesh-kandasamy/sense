@@ -159,7 +159,12 @@ export function CandidateSettingsPage() {
                                     </button>
                                     <input type="file" ref={photoInputRef} onChange={handlePhotoUpload} className="hidden" accept="image/*" />
                                 </div>
-                                <p className="text-sm text-gray-500 text-center">Click the camera icon to change your photo</p>
+                                <p className="text-sm text-gray-500 text-center mb-4">Click the camera icon to change your photo</p>
+
+                                <div className="flex items-center justify-center gap-2 text-gray-600 bg-gray-50 py-2 px-3 rounded-full text-sm font-medium border border-gray-100">
+                                    <Mail className="w-4 h-4" />
+                                    <span>{email}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -186,19 +191,7 @@ export function CandidateSettingsPage() {
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="block text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">
-                                        <Mail className="w-4 h-4 inline mr-2" />
-                                        Email Address
-                                    </label>
-                                    <input
-                                        type="email"
-                                        value={email}
-                                        readOnly
-                                        className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
-                                    />
-                                    <p className="text-xs text-gray-400 mt-1">Email cannot be changed.</p>
-                                </div>
+
                             </div>
                         </div>
 
@@ -227,8 +220,8 @@ export function CandidateSettingsPage() {
                                             onClick={() => resumeInputRef.current?.click()}
                                             disabled={isUploadingResume}
                                             className={`py-2.5 px-6 rounded-full font-medium text-sm transition-colors border ${resumeFilename
-                                                    ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                                    : 'bg-primary text-white border-transparent hover:bg-blue-600 shadow-sm'
+                                                ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                : 'bg-primary text-white border-transparent hover:bg-blue-600 shadow-sm'
                                                 }`}
                                         >
                                             <Upload className="w-4 h-4 inline mr-2" />

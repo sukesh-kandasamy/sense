@@ -92,7 +92,7 @@ function AppRoutes() {
           <Route path="/interviewer/thank-you" element={<InterviewerThankYou />} />
           <Route path="/interviewer/meeting-setup" element={<MeetingSetup />} />
           <Route path="/interviewer/meeting/:meetingId/setup" element={<MeetingSetup />} />
-          <Route path="/interviewer/insights/:meetingId" element={<ReportPage />} />
+          <Route path="/interviewer/report/:meetingId" element={<ReportPage />} />
         </Route>
 
         {/* Candidate Protected Routes */}

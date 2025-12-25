@@ -579,6 +579,21 @@ async def get_meeting_report(meeting_id: str):
         conn.close()
         raise HTTPException(status_code=404, detail="Meeting not found")
         
+    # Get Candidate Name
+    candidates = conn.execute("SELECT name FROM candidates WHERE meeting_id = ?", (meeting_id,)).fetchall()
+    candidate_names = [c['name'] for c in candidates]
+    
+    if not candidate_names:
+        # Fallback: Check if a candidate user exists for this meeting (username pattern: candidate_{meeting_id})
+        candidate_row = conn.execute("SELECT full_name, resume_url FROM users WHERE username = ?", (f"candidate_{meeting_id}",)).fetchone()
+        if candidate_row:
+             candidate_user = dict(candidate_row)
+             if candidate_user['full_name']:
+                 candidate_names.append(candidate_user['full_name'])
+             if candidate_user['resume_url']:
+                 # Add resume URL to meeting dict (assuming single candidate for now or just attaching to meeting)
+                 meeting_dict['resume_url'] = candidate_user['resume_url']
+    
     # Get Insights
     insights = conn.execute(
         "SELECT * FROM insights WHERE meeting_id = ? ORDER BY timestamp ASC", 
@@ -597,8 +612,11 @@ async def get_meeting_report(meeting_id: str):
         
     conn.close()
     
+    meeting_dict = dict(meeting)
+    meeting_dict['candidates'] = candidate_names
+    
     return {
-        "meeting": dict(meeting),
+        "meeting": meeting_dict,
         "insights": insight_list
     }
 

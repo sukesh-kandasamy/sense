@@ -54,6 +54,7 @@ export function CandidateDashboardPage() {
 
     // Resume State
     const [resumeFilename, setResumeFilename] = useState<string | null>(null);
+    const [resumeUrl, setResumeUrl] = useState<string | null>(null);
     const [isUploadingResume, setIsUploadingResume] = useState(false);
     const [showResumeAlert, setShowResumeAlert] = useState(false);
     const resumeInputRef = useRef<HTMLInputElement>(null);
@@ -67,6 +68,7 @@ export function CandidateDashboardPage() {
                     setUserEmail(userRes.data.email || '');
                     setUserPhoto(userRes.data.profile_photo_url || null);
                     setResumeFilename(userRes.data.resume_filename || null);
+                    setResumeUrl(userRes.data.resume_url || null);
                 }
 
                 try {
@@ -138,34 +140,49 @@ export function CandidateDashboardPage() {
     };
 
     return (
-        <div className="min-h-screen bg-white p-6 font-sans">
-            <div className="max-w-7xl mx-auto">
-                {/* Header - Simple & Clean */}
-                <div className="mb-8 border-b border-gray-200 pb-4 flex justify-between items-center">
-                    <div>
-                        <h1 className="text-2xl font-normal text-gray-900 mb-1">Candidate Dashboard</h1>
-                        <p className="text-gray-500 text-sm">Manage your profile and join interviews.</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3">
-                            {userPhoto ? (
-                                <img src={userPhoto.startsWith('http') ? userPhoto : `${BACKEND_URL}${userPhoto}`} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
-                            ) : (
-                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
-                                    {userName.charAt(0).toUpperCase()}
-                                </div>
-                            )}
-                            <div>
-                                <p className="font-medium text-gray-900 text-sm">{userName}</p>
-                                <p className="text-xs text-gray-500">{userEmail}</p>
-                            </div>
-                        </div>
-                        <button onClick={handleLogout} className="p-2 text-gray-500 hover:text-red-600 transition-colors" title="Logout">
-                            <LogOut className="w-5 h-5" />
-                        </button>
-                    </div>
+        <div className="min-h-screen bg-white font-sans">
+            {/* Navbar */}
+            <nav className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-50 flex items-center justify-between mb-8 shadow-sm">
+                <div className="flex items-center gap-3">
+                    <SenseLogo className="text-blue-600" size={32} />
+                    <span className="text-xl font-semibold text-gray-900 tracking-tight">Sense</span>
                 </div>
 
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3">
+                        <div className="text-right hidden md:block">
+                            <p className="font-medium text-gray-900 text-sm">{userName}</p>
+                            <p className="text-xs text-gray-500">{userEmail}</p>
+                        </div>
+                        {userPhoto ? (
+                            <img src={userPhoto.startsWith('http') ? userPhoto : `${BACKEND_URL}${userPhoto}`} className="w-9 h-9 rounded-full object-cover border border-gray-200" />
+                        ) : (
+                            <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
+                                {userName.charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={() => navigate('/candidate/settings')}
+                        className="p-2 text-gray-500 hover:text-blue-600 transition-colors rounded-full hover:bg-gray-100"
+                        title="Account Settings"
+                    >
+                        <Settings className="w-5 h-5" />
+                    </button>
+
+                    <div className="h-8 w-px bg-gray-200"></div>
+                    <button
+                        onClick={handleLogout}
+                        className="text-gray-500 hover:text-red-600 transition-colors flex items-center gap-2 text-sm font-medium"
+                    >
+                        <LogOut className="w-4 h-4" />
+                        <span className="hidden md:inline">Logout</span>
+                    </button>
+                </div>
+            </nav>
+
+            <div className="max-w-7xl mx-auto px-6 py-8">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left Column - Profile & Resume */}
                     <div className="lg:col-span-2 space-y-6">
@@ -190,61 +207,38 @@ export function CandidateDashboardPage() {
                                             {resumeFilename || 'Upload your resume to apply for interviews'}
                                         </p>
                                         <input type="file" ref={resumeInputRef} onChange={handleResumeUpload} className="hidden" accept=".pdf,.doc,.docx" />
-                                        <button
-                                            onClick={() => resumeInputRef.current?.click()}
-                                            disabled={isUploadingResume}
-                                            className={`py-2.5 px-6 rounded-full font-medium text-sm transition-colors border ${resumeFilename
-                                                ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                                : 'bg-primary text-white border-transparent hover:bg-blue-600 shadow-sm'
-                                                }`}
-                                        >
-                                            <Upload className="w-4 h-4 inline mr-2" />
-                                            {isUploadingResume ? 'Uploading...' : (resumeFilename ? 'Update Resume' : 'Upload Resume')}
-                                        </button>
+
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                            <button
+                                                onClick={() => resumeInputRef.current?.click()}
+                                                disabled={isUploadingResume}
+                                                className={`inline-flex items-center gap-2 py-2.5 px-5 rounded-full font-medium text-sm transition-all ${resumeFilename
+                                                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+                                                    }`}
+                                            >
+                                                <Upload className="w-4 h-4" />
+                                                {isUploadingResume ? 'Uploading...' : (resumeFilename ? 'Update' : 'Upload Resume')}
+                                            </button>
+
+                                            {resumeUrl && (
+                                                <a
+                                                    href={resumeUrl.startsWith('http') ? resumeUrl : `${BACKEND_URL}${resumeUrl}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-2 py-2.5 px-5 rounded-full font-medium text-sm transition-all bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                                >
+                                                    <FileText className="w-4 h-4" />
+                                                    View Resume
+                                                </a>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Quick Tips */}
-                        <div className="bg-white rounded-lg border border-blue-100 p-6 shadow-sm ring-1 ring-blue-50">
-                            <div className="flex items-center gap-2 mb-4">
-                                <div className="p-1.5 bg-blue-100 rounded-md">
-                                    <AlertTriangle className="w-5 h-5 text-blue-600" />
-                                </div>
-                                <h2 className="text-lg font-medium text-gray-900">Interview Tips</h2>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                                    <div>
-                                        <p className="text-gray-900 font-medium text-sm">Camera ON</p>
-                                        <p className="text-gray-500 text-xs">Builds rapport with interviewer</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                                    <div>
-                                        <p className="text-gray-900 font-medium text-sm">Quiet Location</p>
-                                        <p className="text-gray-500 text-xs">Minimize background noise</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                                    <div>
-                                        <p className="text-gray-900 font-medium text-sm">Professional Dress</p>
-                                        <p className="text-gray-500 text-xs">Dress appropriately</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
-                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                                    <div>
-                                        <p className="text-gray-900 font-medium text-sm">Stable Internet</p>
-                                        <p className="text-gray-500 text-xs">Use wired if possible</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+
                     </div>
 
                     {/* Right Column - Join Interview */}
@@ -273,19 +267,7 @@ export function CandidateDashboardPage() {
                             </button>
                         </div>
 
-                        {/* Settings */}
-                        <div className="bg-white rounded-lg border border-gray-300 p-6 shadow-sm">
-                            <button
-                                onClick={() => navigate('/candidate/settings')}
-                                className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <Settings className="w-5 h-5 text-gray-600" />
-                                    <span className="text-gray-900 font-medium text-sm">Account Settings</span>
-                                </div>
-                                <ArrowRight className="w-4 h-4 text-gray-400" />
-                            </button>
-                        </div>
+
                     </div>
                 </div>
             </div>

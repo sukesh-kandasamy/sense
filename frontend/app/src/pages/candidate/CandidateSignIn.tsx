@@ -15,6 +15,9 @@ export function CandidateSignIn() {
             // Update name (since login only uses code)
             await axios.put(`${BACKEND_URL}/auth/users/me`, { full_name: name }, { withCredentials: true });
 
+            // Store candidate participation in the meeting
+            await axios.post(`${BACKEND_URL}/auth/meetings/${code}/join`, { name }, { withCredentials: true });
+
             navigate('/candidate/dashboard');
         } catch (err: any) {
             console.error('Join error:', err);

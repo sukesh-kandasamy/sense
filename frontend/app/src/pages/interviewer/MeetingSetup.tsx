@@ -3,18 +3,14 @@ import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from '../../config';
 import {
-    Video,
-    Clock,
-    Share2,
     Copy,
     Check,
     ArrowLeft,
-    Play,
-    Link2,
-    Calendar,
-    Users
+    Clock,
+    Link as LinkIcon,
+    Info
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const DURATION_OPTIONS = [
     { value: 15, label: '15 min' },
@@ -33,7 +29,6 @@ export function MeetingSetup() {
     const [isCopied, setIsCopied] = useState(false);
     const [isLinkCopied, setIsLinkCopied] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'details' | 'preview'>('details');
 
     const meetingCode = meetingId?.toUpperCase() || 'UNKNOWN';
     const shareLink = `${window.location.origin}/auth/candidate/login?access_code=${meetingCode}`;
@@ -97,101 +92,97 @@ export function MeetingSetup() {
     };
 
     return (
-        <div className="min-h-screen bg-[#F0F4F8] font-sans flex items-center justify-center p-6">
+        <div className="min-h-screen bg-white md:bg-[#f8f9fa] flex items-center justify-center p-4 font-sans">
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="max-w-2xl w-full bg-white rounded-2xl shadow-xl overflow-hidden"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="max-w-md w-full bg-white md:rounded-2xl md:shadow-sm md:border border-gray-200 overflow-hidden"
             >
-                {/* Header Section */}
-                <div className="bg-white p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 z-10">
+                {/* Header Actions */}
+                <div className="px-6 py-4 flex items-center justify-between">
                     <button
                         onClick={() => navigate('/interviewer/dashboard')}
-                        className="group flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors"
+                        className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-gray-700"
+                        title="Back to Dashboard"
                     >
-                        <div className="p-2 rounded-full group-hover:bg-gray-100 transition-colors">
-                            <ArrowLeft className="w-5 h-5" />
-                        </div>
-                        <span className="text-sm font-medium">Back to Dashboard</span>
+                        <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Ready to Setup</span>
+                    {/* Status Badge */}
+                    <div className="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1 rounded-full text-xs font-medium border border-green-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse"></span>
+                        Ready to join
                     </div>
                 </div>
 
-                <div className="p-8 space-y-8">
-                    {/* Title Area */}
-                    <div className="text-center space-y-2">
-                        <h1 className="text-3xl font-semibold text-gray-900 tracking-tight">Meeting Details</h1>
-                        <p className="text-gray-500 text-lg">Configure and share your interview session</p>
+                <div className="px-6 pb-8">
+                    {/* Main Title Area */}
+                    <div className="space-y-2 mb-8">
+                        <h1 className="text-[22px] leading-tight text-gray-900 font-normal">
+                            Here's your joining info
+                        </h1>
+                        <p className="text-gray-500 text-sm leading-6">
+                            Send this to the candidate so they can join the session.
+                        </p>
                     </div>
 
-                    {/* Main Card Content */}
-                    <div className="space-y-6">
-                        {/* 1. Meeting URL & Code */}
-                        <div className="bg-gray-50 rounded-xl p-6 border border-gray-200/60">
-                            <div className="flex flex-col md:flex-row gap-6 items-center">
-                                {/* Code Box */}
-                                <div className="text-center md:text-left">
-                                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Meeting Code</h3>
-                                    <div
-                                        onClick={copyCode}
-                                        className="cursor-pointer group relative bg-white border border-gray-200 rounded-lg px-6 py-3 flex items-center gap-3 hover:border-blue-400 hover:shadow-sm transition-all"
-                                    >
-                                        <span className="text-2xl font-mono font-bold text-gray-800 tracking-widest">{meetingCode}</span>
-                                        <div className="p-1.5 rounded-md text-gray-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors">
-                                            {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                        </div>
+                    {/* Sharing Section */}
+                    <div className="space-y-6 mb-8">
+                        {/* Link Box */}
+                        <div>
+                            <div className="bg-[#f1f3f4] rounded-lg p-1.5 pr-2 flex items-center gap-2 group transition-colors hover:bg-gray-200">
+                                <div className="pl-3 py-2 flex-1 min-w-0">
+                                    <div className="text-sm text-gray-700 truncate font-sans select-all">
+                                        {shareLink}
                                     </div>
                                 </div>
+                                <button
+                                    onClick={copyLink}
+                                    className="p-2 text-gray-500 hover:text-gray-800 hover:bg-white rounded-md transition-all shadow-sm"
+                                    title="Copy link"
+                                >
+                                    {isLinkCopied ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
+                                </button>
+                            </div>
 
-                                {/* Divider */}
-                                <div className="hidden md:block w-px h-16 bg-gray-200"></div>
-
-                                {/* Link Box */}
-                                <div className="flex-1 w-full">
-                                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Candidate Link</h3>
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center gap-3 overflow-hidden">
-                                            <Link2 className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                            <span className="text-sm text-gray-600 truncate font-mono">{shareLink}</span>
-                                        </div>
-                                        <button
-                                            onClick={copyLink}
-                                            className="px-4 rounded-lg font-medium text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex-shrink-0 flex items-center gap-2"
-                                        >
-                                            {isLinkCopied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                                            {isLinkCopied ? 'Copied' : 'Copy'}
-                                        </button>
-                                    </div>
+                            {/* Meeting Code Display */}
+                            <div className="mt-3 flex items-center gap-2 pl-1">
+                                <span className="text-xs font-medium text-gray-500">MEETING CODE</span>
+                                <div className="flex items-center gap-2 cursor-pointer group" onClick={copyCode}>
+                                    <span className="text-xs font-bold text-gray-700 tracking-wider font-mono bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded">
+                                        {meetingCode}
+                                    </span>
+                                    {isCopied ?
+                                        <Check className="w-3 h-3 text-green-600" /> :
+                                        <Copy className="w-3 h-3 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                                    }
                                 </div>
                             </div>
                         </div>
 
-                        {/* 2. Configuration */}
-                        <div>
-                            <div className="flex items-center gap-2 mb-4">
-                                <Clock className="w-4 h-4 text-gray-400" />
-                                <h3 className="text-sm font-semibold text-gray-700">Duration Limit</h3>
+                        {/* Configuration Section */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-gray-800">
+                                <Clock className="w-4 h-4 text-[#1a73e8]" />
+                                <span className="text-sm font-medium">Session Duration</span>
                             </div>
 
-                            <div className="flex flex-wrap gap-3">
+                            <div className="flex flex-wrap gap-2">
                                 {DURATION_OPTIONS.map((option) => (
                                     <button
                                         key={option.value}
                                         onClick={() => handleDurationChange(option.value)}
-                                        className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${!isCustom && duration === option.value
-                                                ? 'bg-gray-900 text-white shadow-md transform scale-105'
-                                                : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                        className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all duration-200 ${!isCustom && duration === option.value
+                                            ? 'bg-[#e8f0fe] text-[#1967d2] border-transparent hover:bg-[#d2e3fc]'
+                                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
                                             }`}
                                     >
                                         {option.label}
                                     </button>
                                 ))}
 
-                                {/* Custom Input */}
-                                <div className={`flex items-center rounded-full border transition-all overflow-hidden ${isCustom ? 'border-gray-900 ring-1 ring-gray-900' : 'border-gray-200 hover:border-gray-300'}`}>
+                                <div className={`flex items-center rounded-full border px-3 py-1.5 transition-all ${isCustom ? 'border-[#1967d2] ring-1 ring-[#1967d2] bg-[#e8f0fe]' : 'border-gray-300 bg-white hover:border-gray-400'
+                                    }`}>
                                     <input
                                         type="number"
                                         placeholder="Custom"
@@ -200,14 +191,15 @@ export function MeetingSetup() {
                                             setCustomDuration(e.target.value);
                                             setIsCustom(true);
                                         }}
-                                        className="w-20 pl-4 py-2.5 text-sm outline-none bg-transparent text-gray-900 placeholder-gray-400 text-center remove-arrow"
+                                        className={`w-12 text-sm outline-none bg-transparent text-center remove-arrow ${isCustom ? 'text-[#1967d2] placeholder-[#aecbfa]' : 'text-gray-900 placeholder-gray-500'
+                                            }`}
                                     />
-                                    <span className="text-xs text-gray-400 pr-2">min</span>
+                                    <span className={`text-xs ${isCustom ? 'text-[#1967d2]' : 'text-gray-500'}`}>min</span>
                                     {isCustom && (
                                         <button
                                             onClick={handleCustomSave}
                                             disabled={isSaving}
-                                            className="pr-3 pl-1 text-gray-600 hover:text-green-600"
+                                            className="ml-2 text-[#1967d2] hover:text-[#174ea6]"
                                         >
                                             <Check className="w-3.5 h-3.5" />
                                         </button>
@@ -219,17 +211,12 @@ export function MeetingSetup() {
                 </div>
 
                 {/* Footer Action */}
-                <div className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Video className="w-4 h-4" />
-                        <span>Camera & Mic check next</span>
-                    </div>
+                <div className="p-4 border-t border-gray-100 flex justify-end bg-gray-50/50">
                     <button
                         onClick={() => navigate(`/meeting/${meetingId}`)}
-                        className="group relative inline-flex items-center gap-3 px-8 py-3.5 bg-blue-600 text-white rounded-full font-medium shadow-lg hover:bg-blue-700 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+                        className="bg-[#1a73e8] hover:bg-[#1557b0] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-sm hover:shadow-md transition-all flex items-center gap-2"
                     >
-                        <span>Start Meeting</span>
-                        <Play className="w-4 h-4 fill-current" />
+                        Start now
                     </button>
                 </div>
             </motion.div>

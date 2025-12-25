@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+websockets
+google-genai
+opencv-python-headless
+python-dotenv

@@ -91,6 +91,7 @@ function AppRoutes() {
         <Route element={<RequireAuth allowedRole="interviewer" />}>
           <Route path="/interviewer/thank-you" element={<InterviewerThankYou />} />
           <Route path="/interviewer/meeting-setup" element={<MeetingSetup />} />
+          <Route path="/interviewer/meeting/:meetingId/setup" element={<MeetingSetup />} />
           <Route path="/interviewer/insights/:meetingId" element={<ReportPage />} />
         </Route>
 

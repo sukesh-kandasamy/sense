@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from '../../config';
-import { Button } from '../../components/ui/button';
 import {
-    Video, Plus, Calendar, Clock, User, Trash2, Copy, LogOut, Settings, ExternalLink, Share2
+    Video,
+    Plus,
+    Calendar,
+    Clock,
+    User,
+    Trash2,
+    LogOut,
+    Settings,
+    Share2,
+    ArrowRight,
+    CheckCircle,
+    AlertCircle
 } from 'lucide-react';
 
 interface Meeting {
@@ -20,18 +30,21 @@ export function SetupPage() {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [userName, setUserName] = useState('Interviewer');
+    const [userEmail, setUserEmail] = useState('');
+    const [userPhoto, setUserPhoto] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch user info
                 const userRes = await axios.get(`${BACKEND_URL}/auth/users/me`, { withCredentials: true });
                 if (userRes.data) {
                     setUserName(userRes.data.full_name || userRes.data.username || 'Interviewer');
+                    setUserEmail(userRes.data.email || '');
+                    setUserPhoto(userRes.data.profile_photo_url || null);
                 }
 
-                // Fetch meetings
                 const meetingsRes = await axios.get(`${BACKEND_URL}/auth/meetings`, { withCredentials: true });
                 setMeetings(meetingsRes.data || []);
             } catch (err) {
@@ -71,7 +84,8 @@ export function SetupPage() {
     const copyMeetingLink = (id: string) => {
         const link = `${window.location.origin}/auth/candidate/login?access_code=${id.toUpperCase()}`;
         navigator.clipboard.writeText(link);
-        alert('Meeting link copied!');
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
     };
 
     const handleLogout = async () => {
@@ -83,90 +97,159 @@ export function SetupPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
-            {/* Sidebar */}
-            <div className="w-64 bg-white border-r border-gray-200 p-6 hidden md:flex flex-col">
-                <div className="flex items-center gap-2 mb-10">
-                    <Video className="w-8 h-8 text-blue-600" />
-                    <span className="text-xl font-bold">Sense</span>
-                </div>
-                <nav className="flex flex-col gap-2">
-                    <Button variant="ghost" className="justify-start font-medium">
-                        <Calendar className="w-4 h-4 mr-2" /> Dashboard
-                    </Button>
-                    <Button variant="ghost" className="justify-start text-gray-600" onClick={() => navigate('/interviewer/settings')}>
-                        <Settings className="w-4 h-4 mr-2" /> Settings
-                    </Button>
-                </nav>
-                <div className="mt-auto">
-                    <button onClick={handleLogout} className="flex items-center gap-3 text-gray-600 hover:text-red-600 text-sm font-medium">
-                        <LogOut className="w-5 h-5" />
-                        Sign Out
-                    </button>
-                </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex-1 p-8">
+        <div className="min-h-screen bg-white p-6 font-sans">
+            <div className="max-w-7xl mx-auto">
                 {/* Header */}
-                <div className="flex justify-between items-center mb-8">
+                <div className="mb-8 border-b border-gray-200 pb-4 flex justify-between items-center">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Welcome, {userName}</h1>
-                        <p className="text-gray-500">Manage your interviews and meetings.</p>
+                        <h1 className="text-2xl font-normal text-gray-900 mb-1">Interviewer Dashboard</h1>
+                        <p className="text-gray-500 text-sm">Manage your meetings and interviews.</p>
                     </div>
-                    <Button onClick={handleCreateMeeting} disabled={isCreating}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        {isCreating ? 'Creating...' : 'New Meeting'}
-                    </Button>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
+                            {userPhoto ? (
+                                <img src={userPhoto.startsWith('http') ? userPhoto : `${BACKEND_URL}${userPhoto}`} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
+                            ) : (
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
+                                    {userName.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <div>
+                                <p className="font-medium text-gray-900 text-sm">{userName}</p>
+                                <p className="text-xs text-gray-500">{userEmail}</p>
+                            </div>
+                        </div>
+                        <button onClick={() => navigate('/interviewer/settings')} className="p-2 text-gray-500 hover:text-gray-900 transition-colors" title="Settings">
+                            <Settings className="w-5 h-5" />
+                        </button>
+                        <button onClick={handleLogout} className="p-2 text-gray-500 hover:text-red-600 transition-colors" title="Logout">
+                            <LogOut className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
-                {/* Meetings List */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-                    <div className="px-6 py-4 border-b border-gray-100">
-                        <h2 className="font-semibold text-lg text-gray-800">Your Meetings</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left Column - Meetings List */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Meetings Card */}
+                        <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                                <h2 className="text-lg font-medium text-gray-800">Your Meetings</h2>
+                                <button
+                                    onClick={handleCreateMeeting}
+                                    disabled={isCreating}
+                                    className="py-2 px-4 rounded-full font-medium text-sm bg-primary text-white hover:bg-blue-600 transition-colors shadow-sm flex items-center gap-2"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    {isCreating ? 'Creating...' : 'New Meeting'}
+                                </button>
+                            </div>
+
+                            {isLoading ? (
+                                <div className="p-10 text-center text-gray-500">Loading...</div>
+                            ) : meetings.length === 0 ? (
+                                <div className="p-10 text-center">
+                                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <Video className="w-8 h-8 text-primary" />
+                                    </div>
+                                    <h3 className="font-medium text-gray-900 mb-2">No meetings yet</h3>
+                                    <p className="text-gray-500 text-sm mb-6">Create your first meeting to get started.</p>
+                                    <button
+                                        onClick={handleCreateMeeting}
+                                        disabled={isCreating}
+                                        className="py-2.5 px-6 rounded-full font-medium text-sm bg-primary text-white hover:bg-blue-600 transition-colors shadow-sm inline-flex items-center gap-2"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Create Meeting
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-gray-100">
+                                    {meetings.map((meeting) => (
+                                        <div key={meeting.id} className="p-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                            <div className="flex items-start gap-4">
+                                                <div className="p-2 bg-blue-50 rounded-full text-primary">
+                                                    <Video className="w-5 h-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-gray-900 font-mono text-lg">{meeting.id.toUpperCase()}</p>
+                                                    <div className="flex items-center gap-3 mt-1">
+                                                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                                                            <Calendar className="w-3 h-3" />
+                                                            {new Date(meeting.created_at).toLocaleDateString()}
+                                                        </span>
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full ${meeting.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                            {meeting.active ? 'Active' : 'Ended'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => copyMeetingLink(meeting.id)}
+                                                    className={`py-2 px-4 rounded-full font-medium text-sm border transition-colors flex items-center gap-2 ${copiedId === meeting.id
+                                                            ? 'bg-green-50 text-green-600 border-green-200'
+                                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    {copiedId === meeting.id ? <CheckCircle className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                                                    {copiedId === meeting.id ? 'Copied!' : 'Share'}
+                                                </button>
+                                                <button
+                                                    onClick={() => navigate(`/meeting/${meeting.id}`)}
+                                                    className="py-2 px-4 rounded-full font-medium text-sm bg-primary text-white hover:bg-blue-600 transition-colors shadow-sm flex items-center gap-2"
+                                                >
+                                                    Join <ArrowRight className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteMeeting(meeting.id)}
+                                                    className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {isLoading ? (
-                        <div className="p-10 text-center text-gray-500">Loading...</div>
-                    ) : meetings.length === 0 ? (
-                        <div className="p-10 text-center">
-                            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Video className="w-8 h-8 text-gray-400" />
-                            </div>
-                            <h3 className="font-medium text-gray-900 mb-2">No meetings yet</h3>
-                            <p className="text-gray-500 text-sm mb-6">Create your first meeting to get started.</p>
-                            <Button onClick={handleCreateMeeting} disabled={isCreating}>
-                                <Plus className="w-4 h-4 mr-2" /> Create Meeting
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="divide-y divide-gray-100">
-                            {meetings.map((meeting) => (
-                                <div key={meeting.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                                            <Video className="w-5 h-5 text-blue-600" />
-                                        </div>
-                                        <div>
-                                            <p className="font-medium text-gray-900 font-mono">{meeting.id.toUpperCase()}</p>
-                                            <p className="text-xs text-gray-500">Created {new Date(meeting.created_at).toLocaleDateString()}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button variant="outline" size="sm" onClick={() => copyMeetingLink(meeting.id)}>
-                                            <Share2 className="w-4 h-4 mr-1" /> Share
-                                        </Button>
-                                        <Button size="sm" onClick={() => navigate(`/meeting/${meeting.id}`)}>
-                                            <ExternalLink className="w-4 h-4 mr-1" /> Join
-                                        </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleDeleteMeeting(meeting.id)} className="text-gray-400 hover:text-red-600">
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </div>
+                    {/* Right Column - Quick Actions */}
+                    <div className="space-y-6">
+                        {/* Quick Create */}
+                        <div className="bg-white rounded-lg border border-gray-300 p-6 shadow-sm">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-blue-50 rounded-full text-primary">
+                                    <Plus className="w-5 h-5" />
                                 </div>
-                            ))}
+                                <h3 className="text-lg font-medium text-gray-800">Quick Start</h3>
+                            </div>
+                            <p className="text-gray-500 text-sm mb-6">Create a new meeting room and share the code with your candidate.</p>
+                            <button
+                                onClick={handleCreateMeeting}
+                                disabled={isCreating}
+                                className="w-full py-3.5 rounded-full font-medium transition-all shadow-md bg-primary hover:bg-blue-600 text-white flex items-center justify-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                {isCreating ? 'Creating...' : 'Create New Meeting'}
+                            </button>
                         </div>
-                    )}
+
+                        {/* Account Settings */}
+                        <div className="bg-white rounded-lg border border-gray-300 p-6 shadow-sm">
+                            <button
+                                onClick={() => navigate('/interviewer/settings')}
+                                className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Settings className="w-5 h-5 text-gray-600" />
+                                    <span className="text-gray-900 font-medium text-sm">Account Settings</span>
+                                </div>
+                                <ArrowRight className="w-4 h-4 text-gray-400" />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

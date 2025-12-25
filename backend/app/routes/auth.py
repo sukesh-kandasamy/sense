@@ -258,6 +258,24 @@ async def delete_meetings(request: DeleteMeetingsRequest, current_user: User = D
     
     return {"message": f"Successfully deleted {deleted_count} meetings", "deleted_count": deleted_count}
 
+@router.delete("/meetings/{meeting_id}")
+async def delete_single_meeting(meeting_id: str, current_user: User = Depends(get_current_interviewer)):
+    """Delete a single meeting by ID."""
+    conn = get_db_connection()
+    
+    # Ensure user can only delete their own meeting
+    meeting = conn.execute("SELECT * FROM meetings WHERE id = ? AND creator_username = ?", 
+                           (meeting_id.lower(), current_user.username)).fetchone()
+    if not meeting:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Meeting not found or access denied")
+    
+    conn.execute("DELETE FROM meetings WHERE id = ?", (meeting_id.lower(),))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "Meeting deleted successfully"}
+
 @router.get("/meetings", response_model=list[MeetingSummary])
 async def get_meetings(
     limit: int = 5,

@@ -3,15 +3,15 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BACKEND_URL, WS_BASE_URL } from '../../config';
-import { VideoPanel } from '../../components/meeting/VideoPanel';
-import { EmotionDetector } from '../../components/meeting/EmotionDetector';
-import { SmartNudge } from '../../components/meeting/SmartNudge';
-import { InterviewControls } from '../../components/meeting/InterviewControls';
+import { VideoPanel } from './VideoPanel';
+import { EmotionDetector } from './EmotionDetector';
+import { SmartNudge } from './SmartNudge';
+import { InterviewControls } from './InterviewControls';
 import { EmotionData } from '../../types';
 import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertTriangle, Share2, Copy, Check } from 'lucide-react';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from './ui/resizable';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
 import { ImperativePanelHandle } from 'react-resizable-panels';
-import { usePageTransition } from '../../components/common/PageTransition';
+import { usePageTransition } from '../common/PageTransition';
 
 interface InterviewRoomProps {
   userRole: 'interviewer' | 'candidate';

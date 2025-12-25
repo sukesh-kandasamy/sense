@@ -1,20 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { BACKEND_URL } from '../../config';
 import {
-    Calendar,
-    Clock,
     Video,
     User,
     LogOut,
-    ChevronRight,
     Briefcase,
     CheckCircle,
-    AlertCircle,
     Settings,
     FileText,
-    UploadCloud
+    Upload,
+    Clock,
+    Calendar,
+    AlertTriangle,
+    ArrowRight
 } from 'lucide-react';
 import {
     Dialog,
@@ -60,7 +60,6 @@ export function CandidateDashboardPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Fetch user info
                 const userRes = await axios.get(`${BACKEND_URL}/auth/users/me`, { withCredentials: true });
                 if (userRes.data) {
                     setUserName(userRes.data.full_name || userRes.data.email?.split('@')[0] || 'Candidate');
@@ -69,7 +68,6 @@ export function CandidateDashboardPage() {
                     setResumeFilename(userRes.data.resume_filename || null);
                 }
 
-                // Fetch candidate's meetings
                 try {
                     const meetingsRes = await axios.get(`${BACKEND_URL}/auth/candidate/meetings`, { withCredentials: true });
                     setMeetings(meetingsRes.data || []);
@@ -83,7 +81,6 @@ export function CandidateDashboardPage() {
                 setIsLoading(false);
             }
         };
-
         fetchData();
     }, []);
 
@@ -121,83 +118,173 @@ export function CandidateDashboardPage() {
         }
     };
 
+    const handleJoinMeeting = async () => {
+        if (!accessCode.trim()) {
+            setJoinError('Please enter a meeting code');
+            return;
+        }
+        setIsJoining(true);
+        setJoinError(null);
+        try {
+            // Verify meeting exists
+            await axios.get(`${BACKEND_URL}/auth/meetings/${accessCode.toLowerCase()}`, { withCredentials: true });
+            navigate(`/meeting/${accessCode.toLowerCase()}`);
+        } catch (err: any) {
+            setJoinError(err.response?.data?.detail || 'Invalid meeting code');
+        } finally {
+            setIsJoining(false);
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50 flex">
-            {/* Sidebar Skeleton */}
-            <div className="w-64 bg-white border-r border-gray-200 p-6 hidden md:flex flex-col">
-                <div className="flex items-center gap-2 mb-10">
-                    <Video className="w-8 h-8 text-blue-600" />
-                    <span className="text-xl font-bold">Sense</span>
-                </div>
-                <div className="flex flex-col gap-2">
-                    <Button variant="ghost" className="justify-start"><Briefcase className="w-4 h-4 mr-2" /> Dashboard</Button>
-                    <Button variant="ghost" className="justify-start" onClick={() => navigate('/candidate/settings')}><Settings className="w-4 h-4 mr-2" /> Settings</Button>
-                </div>
-                <div className="mt-auto">
-                    <button onClick={handleLogout} className="flex items-center gap-3 text-gray-600 hover:text-red-600 text-sm font-medium">
-                        <LogOut className="w-5 h-5" />
-                        Sign Out
-                    </button>
-                </div>
-            </div>
-
-            <div className="flex-1 p-8">
-                {/* Header */}
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                    <div className="flex items-center gap-3">
-                        <span className="font-medium text-gray-700">{userName}</span>
-                        {userPhoto ?
-                            <img src={userPhoto} className="w-10 h-10 rounded-full" /> :
-                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">{userName[0]}</div>
-                        }
+        <div className="min-h-screen bg-white p-6 font-sans">
+            <div className="max-w-7xl mx-auto">
+                {/* Header - Simple & Clean */}
+                <div className="mb-8 border-b border-gray-200 pb-4 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-2xl font-normal text-gray-900 mb-1">Candidate Dashboard</h1>
+                        <p className="text-gray-500 text-sm">Manage your profile and join interviews.</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
+                            {userPhoto ? (
+                                <img src={userPhoto.startsWith('http') ? userPhoto : `${BACKEND_URL}${userPhoto}`} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
+                            ) : (
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
+                                    {userName.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <div>
+                                <p className="font-medium text-gray-900 text-sm">{userName}</p>
+                                <p className="text-xs text-gray-500">{userEmail}</p>
+                            </div>
+                        </div>
+                        <button onClick={handleLogout} className="p-2 text-gray-500 hover:text-red-600 transition-colors" title="Logout">
+                            <LogOut className="w-5 h-5" />
+                        </button>
                     </div>
                 </div>
 
-                {/* Quick Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    {/* Resume Card */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                        <div className="flex justify-between mb-4">
-                            <div className={`p-3 rounded-lg ${resumeFilename ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
-                                <FileText className="w-6 h-6" />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left Column - Profile & Resume */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Resume Card */}
+                        <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                                <h2 className="text-lg font-medium text-gray-800">Your Resume</h2>
                             </div>
-                            {resumeFilename && <CheckCircle className="w-5 h-5 text-green-500" />}
+                            <div className="p-6">
+                                <div className="flex items-start gap-4">
+                                    <div className={`p-3 rounded-full ${resumeFilename ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                                        <FileText className="w-6 h-6" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h3 className="font-medium text-gray-900">
+                                                {resumeFilename ? 'Resume Uploaded' : 'No Resume Uploaded'}
+                                            </h3>
+                                            {resumeFilename && <CheckCircle className="w-4 h-4 text-green-500" />}
+                                        </div>
+                                        <p className="text-sm text-gray-500 mb-4">
+                                            {resumeFilename || 'Upload your resume to apply for interviews'}
+                                        </p>
+                                        <input type="file" ref={resumeInputRef} onChange={handleResumeUpload} className="hidden" accept=".pdf,.doc,.docx" />
+                                        <button
+                                            onClick={() => resumeInputRef.current?.click()}
+                                            disabled={isUploadingResume}
+                                            className={`py-2.5 px-6 rounded-full font-medium text-sm transition-colors border ${resumeFilename
+                                                    ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                    : 'bg-primary text-white border-transparent hover:bg-blue-600 shadow-sm'
+                                                }`}
+                                        >
+                                            <Upload className="w-4 h-4 inline mr-2" />
+                                            {isUploadingResume ? 'Uploading...' : (resumeFilename ? 'Update Resume' : 'Upload Resume')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <h3 className="font-semibold mb-1">{resumeFilename ? 'Resume Uploaded' : 'Upload Resume'}</h3>
-                        <p className="text-sm text-gray-500 mb-4 truncate">{resumeFilename || "Required to join interviews"}</p>
-                        <input type="file" ref={resumeInputRef} onChange={handleResumeUpload} className="hidden" accept=".pdf,.doc,.docx" />
-                        <Button
-                            className="w-full"
-                            variant={resumeFilename ? "outline" : "default"}
-                            onClick={() => resumeInputRef.current?.click()}
-                            disabled={isUploadingResume}
-                        >
-                            {isUploadingResume ? 'Uploading...' : (resumeFilename ? 'Update Resume' : 'Upload Now')}
-                        </Button>
+
+                        {/* Quick Tips */}
+                        <div className="bg-white rounded-lg border border-blue-100 p-6 shadow-sm ring-1 ring-blue-50">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="p-1.5 bg-blue-100 rounded-md">
+                                    <AlertTriangle className="w-5 h-5 text-blue-600" />
+                                </div>
+                                <h2 className="text-lg font-medium text-gray-900">Interview Tips</h2>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
+                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                                    <div>
+                                        <p className="text-gray-900 font-medium text-sm">Camera ON</p>
+                                        <p className="text-gray-500 text-xs">Builds rapport with interviewer</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
+                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                                    <div>
+                                        <p className="text-gray-900 font-medium text-sm">Quiet Location</p>
+                                        <p className="text-gray-500 text-xs">Minimize background noise</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
+                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                                    <div>
+                                        <p className="text-gray-900 font-medium text-sm">Professional Dress</p>
+                                        <p className="text-gray-500 text-xs">Dress appropriately</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-md border border-gray-100">
+                                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                                    <div>
+                                        <p className="text-gray-900 font-medium text-sm">Stable Internet</p>
+                                        <p className="text-gray-500 text-xs">Use wired if possible</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Join Card */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between">
-                        <div>
-                            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center mb-4">
-                                <Video className="w-6 h-6" />
+                    {/* Right Column - Join Interview */}
+                    <div className="space-y-6">
+                        {/* Join Interview Card */}
+                        <div className="bg-white rounded-lg border border-gray-300 p-6 shadow-sm">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-blue-50 rounded-full text-primary">
+                                    <Video className="w-5 h-5" />
+                                </div>
+                                <h3 className="text-lg font-medium text-gray-800">Join Interview</h3>
                             </div>
-                            <h3 className="font-semibold text-lg mb-1">Join Interview</h3>
-                            <p className="text-sm text-gray-500">Enter access code to join</p>
+                            <p className="text-gray-500 text-sm mb-6">Enter your meeting code to join an interview session.</p>
+
+                            <button
+                                onClick={() => {
+                                    if (!resumeFilename) {
+                                        setShowResumeAlert(true);
+                                        return;
+                                    }
+                                    setIsJoinModalOpen(true);
+                                }}
+                                className="w-full py-3.5 rounded-full font-medium transition-all shadow-md bg-primary hover:bg-blue-600 text-white flex items-center justify-center gap-2"
+                            >
+                                Join Now <ArrowRight className="w-4 h-4" />
+                            </button>
                         </div>
-                        <Button
-                            className="w-full mt-4"
-                            onClick={() => {
-                                if (!resumeFilename) {
-                                    setShowResumeAlert(true);
-                                    return;
-                                }
-                                setIsJoinModalOpen(true);
-                            }}
-                        >
-                            Join Now
-                        </Button>
+
+                        {/* Settings */}
+                        <div className="bg-white rounded-lg border border-gray-300 p-6 shadow-sm">
+                            <button
+                                onClick={() => navigate('/candidate/settings')}
+                                className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Settings className="w-5 h-5 text-gray-600" />
+                                    <span className="text-gray-900 font-medium text-sm">Account Settings</span>
+                                </div>
+                                <ArrowRight className="w-4 h-4 text-gray-400" />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -207,7 +294,7 @@ export function CandidateDashboardPage() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Resume Required</DialogTitle>
-                        <DialogDescription>Please upload your resume to proceed.</DialogDescription>
+                        <DialogDescription>Please upload your resume before joining an interview.</DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button onClick={() => { setShowResumeAlert(false); setTimeout(() => resumeInputRef.current?.click(), 100); }}>
@@ -217,23 +304,28 @@ export function CandidateDashboardPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Join Modal - Skeleton */}
+            {/* Join Modal */}
             <Dialog open={isJoinModalOpen} onOpenChange={setIsJoinModalOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Join Interview</DialogTitle>
+                        <DialogDescription>Enter the 8-character meeting code provided by your interviewer.</DialogDescription>
                     </DialogHeader>
-                    <div className="py-4">
+                    <div className="py-4 space-y-4">
                         <input
-                            className="w-full border p-2 rounded"
-                            placeholder="Enter Access Code"
+                            className="w-full border border-gray-300 p-3 rounded-lg text-center uppercase tracking-widest font-mono text-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                            placeholder="ABCD1234"
                             value={accessCode}
-                            onChange={(e) => setAccessCode(e.target.value)}
+                            onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+                            maxLength={8}
                         />
-                        <p className="text-xs text-red-500 mt-2">Note: Join logic needs full restoration from Git.</p>
+                        {joinError && <p className="text-sm text-red-500 text-center">{joinError}</p>}
                     </div>
                     <DialogFooter>
-                        <Button onClick={() => navigate(`/meeting/${accessCode}`)}>Join (Simulated)</Button>
+                        <Button variant="outline" onClick={() => setIsJoinModalOpen(false)}>Cancel</Button>
+                        <Button onClick={handleJoinMeeting} disabled={isJoining}>
+                            {isJoining ? 'Joining...' : 'Join Meeting'}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

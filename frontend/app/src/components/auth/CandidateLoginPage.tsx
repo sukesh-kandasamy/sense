@@ -4,6 +4,7 @@ import { Eye, EyeOff, Home, ArrowRight } from 'lucide-react';
 import axios from 'axios';
 import { useEffect } from 'react';
 import { BACKEND_URL } from '../../config';
+import { SenseLogo } from '../icons/SenseIcons';
 
 interface CandidateLoginPageProps {
     onLogin?: (email: string, password: string) => void;
@@ -51,10 +52,6 @@ export function CandidateLoginPage({ onLogin }: CandidateLoginPageProps) {
                 // Logout the mismatched user immediately
                 await axios.post(`${BACKEND_URL}/auth/logout`, {}, { withCredentials: true });
                 setError("You are an Interviewer. Please login from the Interviewer page.");
-                // Optional: Automatically redirect after a delay or let them click
-                // For now, just show error. Or better, redirect to interviewer login?
-                // Let's redirect to interviewer login with a message? 
-                // Simple error is safer for now to avoid confusion.
                 return;
             }
 
@@ -101,7 +98,7 @@ export function CandidateLoginPage({ onLogin }: CandidateLoginPageProps) {
                 {/* Logo & Header */}
                 <div className="flex flex-col items-center mb-8">
                     <div className="flex items-center gap-2.5 mb-6">
-                        <img src="/logo.svg" alt="Sense Logo" className="w-16 h-16 rounded-xl" />
+                        <SenseLogo className="text-blue-600" size={64} />
                         <span className="text-2xl font-normal text-gray-800 tracking-tight">sense</span>
                     </div>
                     <h1 className="text-[24px] font-normal text-gray-900 mb-3 text-center">Candidate Login</h1>

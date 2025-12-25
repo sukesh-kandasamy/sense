@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { BACKEND_URL } from '../../config';
+import { SenseLogo } from '../../components/icons/SenseIcons';
 import {
     Video,
     User,
@@ -193,8 +194,8 @@ export function CandidateDashboardPage() {
                                             onClick={() => resumeInputRef.current?.click()}
                                             disabled={isUploadingResume}
                                             className={`py-2.5 px-6 rounded-full font-medium text-sm transition-colors border ${resumeFilename
-                                                    ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                                    : 'bg-primary text-white border-transparent hover:bg-blue-600 shadow-sm'
+                                                ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                : 'bg-primary text-white border-transparent hover:bg-blue-600 shadow-sm'
                                                 }`}
                                         >
                                             <Upload className="w-4 h-4 inline mr-2" />
@@ -251,8 +252,8 @@ export function CandidateDashboardPage() {
                         {/* Join Interview Card */}
                         <div className="bg-white rounded-lg border border-gray-300 p-6 shadow-sm">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2 bg-blue-50 rounded-full text-primary">
-                                    <Video className="w-5 h-5" />
+                                <div className="p-2 transition-transform transform hover:scale-105">
+                                    <SenseLogo className="text-blue-600" size={24} />
                                 </div>
                                 <h3 className="text-lg font-medium text-gray-800">Join Interview</h3>
                             </div>

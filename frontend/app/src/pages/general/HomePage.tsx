@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Video, CheckCircle, BarChart2, Shield } from 'lucide-react';
 import { Button } from '../../components/ui/button';
+import { SenseLogo } from '../../components/icons/SenseIcons';
 
 export function HomePage() {
     const navigate = useNavigate();
@@ -12,7 +13,7 @@ export function HomePage() {
             <nav className="border-b border-gray-100 bg-white/80 backdrop-blur-md sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <Video className="w-8 h-8 text-blue-600" />
+                        <SenseLogo className="text-blue-600" size={32} />
                         <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
                             Sense
                         </span>

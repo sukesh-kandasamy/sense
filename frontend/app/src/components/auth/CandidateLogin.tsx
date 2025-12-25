@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Video, ArrowRight, Home } from 'lucide-react';
 
+import { SenseLogo } from '../icons/SenseIcons';
+
 interface CandidateLoginProps {
     onJoin: (code: string, name: string) => void;
     defaultCode?: string;
@@ -32,7 +34,7 @@ export function CandidateLogin({ onJoin, defaultCode = '' }: CandidateLoginProps
                 {/* Logo & Header */}
                 <div className="flex flex-col items-center mb-8">
                     <div className="flex items-center gap-2.5 mb-6">
-                        <img src="/logo.svg" alt="Sense Logo" className="w-16 h-16 rounded-xl" />
+                        <SenseLogo className="text-blue-600" size={64} />
                         <span className="text-2xl font-normal text-gray-800 tracking-tight">sense</span>
                     </div>
                     <h1 className="text-[24px] font-normal text-gray-900 mb-2 text-center">Join Interview</h1>

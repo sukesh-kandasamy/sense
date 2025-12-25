@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Video, Eye, EyeOff, Home } from 'lucide-react';
+import { SenseLogo } from '../icons/SenseIcons';
 
 interface LoginPageProps {
   onLogin: (email: string, password: string) => void;
@@ -63,7 +64,7 @@ export function LoginPage({ onLogin, isLoading = false }: LoginPageProps) {
         {/* Logo & Header */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2.5 mb-6">
-            <img src="/logo.svg" alt="Sense Logo" className="w-16 h-16 rounded-xl" />
+            <SenseLogo className="text-blue-600" size={64} />
             <span className="text-2xl font-normal text-gray-800 tracking-tight">sense</span>
           </div>
           <h1 className="text-[24px] font-normal text-gray-900 mb-3 text-center">Welcome to Sense</h1>

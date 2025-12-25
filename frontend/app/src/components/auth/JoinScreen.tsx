@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Video } from 'lucide-react';
 import axios from 'axios';
 import { BACKEND_URL, ROUTES } from '../../config';
+import { SenseLogo } from '../icons/SenseIcons';
 
 interface JoinScreenProps {
   onJoin: (role: 'interviewer' | 'candidate', name: string, meetingId: string) => void;
@@ -54,7 +55,7 @@ export function JoinScreen({ onJoin }: JoinScreenProps) {
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md border border-gray-200">
         <div className="flex items-center justify-center mb-6">
           <div className="bg-white p-1 rounded-2xl">
-            <img src="/logo.svg" alt="Sense Logo" className="w-12 h-12" />
+            <SenseLogo className="text-blue-600" size={48} />
           </div>
         </div>
 

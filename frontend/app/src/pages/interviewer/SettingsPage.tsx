@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { BACKEND_URL } from '../../config';
 import { Button } from '../../components/ui/button';
+import { InterviewerNavbar } from '../../components/interviewer/InterviewerNavbar';
 import {
-    Video, ArrowLeft, User, Mail, Lock, Camera, Save, Loader2
+    ArrowLeft, User, Mail, Camera, Save, Loader2
 } from 'lucide-react';
 
 export function SettingsPage() {
@@ -75,18 +76,15 @@ export function SettingsPage() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <InterviewerNavbar userName={fullName || 'Interviewer'} userEmail={email} userPhoto={profilePhoto} />
+
+            {/* Header Actions */}
+            <div className="bg-white border-b border-gray-200 sticky top-16 z-10">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => navigate('/interviewer/dashboard')} className="text-gray-500 hover:text-gray-900">
-                            <ArrowLeft className="w-5 h-5" />
-                        </button>
-                        <div className="flex items-center gap-2">
-                            <Video className="w-6 h-6 text-blue-600" />
-                            <span className="text-lg font-semibold">Settings</span>
-                        </div>
-                    </div>
+                    <button onClick={() => navigate('/interviewer/dashboard')} className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors">
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-medium">Back to Dashboard</span>
+                    </button>
                     <Button onClick={handleSave} disabled={isSaving}>
                         {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                         Save Changes
@@ -101,13 +99,13 @@ export function SettingsPage() {
                     <div className="p-6 border-b border-gray-100 flex items-center gap-6">
                         <div className="relative">
                             {profilePhoto ? (
-                                <img src={profilePhoto.startsWith('/') ? `${BACKEND_URL}${profilePhoto}` : profilePhoto} alt="Profile" className="w-20 h-20 rounded-full object-cover" />
+                                <img src={profilePhoto.startsWith('http') ? profilePhoto : `${BACKEND_URL}${profilePhoto}`} alt="Profile" className="w-20 h-20 rounded-full object-cover" />
                             ) : (
                                 <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-2xl font-bold">
                                     {fullName ? fullName[0].toUpperCase() : 'U'}
                                 </div>
                             )}
-                            <label className="absolute bottom-0 right-0 bg-white p-1.5 rounded-full shadow-md cursor-pointer border border-gray-200 hover:bg-gray-50">
+                            <label className="absolute bottom-0 right-0 bg-white p-1.5 rounded-full shadow-md cursor-pointer border border-gray-200 hover:bg-gray-50 transition-colors">
                                 <Camera className="w-4 h-4 text-gray-600" />
                                 <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
                             </label>
@@ -129,7 +127,7 @@ export function SettingsPage() {
                                 type="text"
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                                 placeholder="Enter your full name"
                             />
                         </div>

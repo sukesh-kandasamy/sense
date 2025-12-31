@@ -1,8 +1,12 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status
 from typing import Dict, List
+from core.dependencies import get_current_user_ws
+from core.database import get_db_connection
+from models import User
 
 router = APIRouter()
 
+# --- Connection Manager ---
 # --- Connection Manager ---
 class ConnectionManager:
     def __init__(self):
@@ -54,11 +58,45 @@ manager = ConnectionManager()
 # --- Routes ---
 
 @router.websocket("/ws/{room_id}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str):
+async def websocket_endpoint(websocket: WebSocket, room_id: str, user: User = Depends(get_current_user_ws)):
     # Normalize room_id to lowercase for consistency
     room_id = room_id.lower()
-    print(f"[SIGNALING] New WebSocket connection attempt for room: '{room_id}'")
+    print(f"[SIGNALING] New WebSocket connection attempt for room: '{room_id}' by user: {user.username} ({user.role})")
     
+    # --- Authorization Check ---
+    conn = get_db_connection()
+    meeting = conn.execute("SELECT * FROM meetings WHERE id = ?", (room_id,)).fetchone()
+    conn.close()
+    
+    if not meeting:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Meeting not found")
+        return
+
+    is_authorized = False
+    if user.role == "interviewer":
+        if meeting["creator_username"] == user.username:
+            is_authorized = True
+    elif user.role == "candidate":
+        # Check if this is the candidate for this meeting
+        if meeting["candidate_email"] and meeting["candidate_email"] == user.email:
+            is_authorized = True
+        # If no candidate assigned yet, and this is a registered candidate, assign them
+        elif not meeting["candidate_email"] and user.email:
+            conn = get_db_connection()
+            conn.execute("UPDATE meetings SET candidate_email = ? WHERE id = ?", (user.email, room_id))
+            conn.commit()
+            conn.close()
+            is_authorized = True
+            print(f"[SIGNALING] Assigned candidate {user.email} to meeting {room_id}")
+        # Or if logged in via code (guest)
+        elif user.username == f"candidate_{room_id}":
+            is_authorized = True
+
+    if not is_authorized:
+        print(f"[SIGNALING] Authorization failed for user {user.username} in room {room_id}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authorized for this meeting")
+        return
+
     # Try to connect - will be rejected if room is full
     connected = await manager.connect(websocket, room_id)
     if not connected:

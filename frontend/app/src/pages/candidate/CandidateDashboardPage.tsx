@@ -29,12 +29,13 @@ import { Button } from '../../components/ui/button';
 
 interface Meeting {
     id: string;
-    title: string;
-    scheduled_date: string;
-    scheduled_time: string;
-    duration: number;
-    status: 'scheduled' | 'completed' | 'cancelled';
+    creator_username: string;
+    candidate_email: string;
+    created_at: string;
+    active: boolean;
+    duration?: number;
     interviewer_name?: string;
+    interviewer_email?: string;
 }
 
 export function CandidateDashboardPage() {
@@ -58,6 +59,7 @@ export function CandidateDashboardPage() {
     const [isUploadingResume, setIsUploadingResume] = useState(false);
     const [showResumeAlert, setShowResumeAlert] = useState(false);
     const resumeInputRef = useRef<HTMLInputElement>(null);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -114,7 +116,7 @@ export function CandidateDashboardPage() {
             setResumeFilename(res.data.filename);
         } catch (err: any) {
             console.error(err);
-            alert(err.response?.data?.detail || "Failed to upload resume.");
+            setUploadError(err.response?.data?.detail || "Failed to upload resume.");
         } finally {
             setIsUploadingResume(false);
             if (resumeInputRef.current) resumeInputRef.current.value = '';
@@ -131,7 +133,7 @@ export function CandidateDashboardPage() {
         try {
             // Verify meeting exists
             await axios.get(`${BACKEND_URL}/auth/meetings/${accessCode.toLowerCase()}`, { withCredentials: true });
-            navigate(`/meeting/${accessCode.toLowerCase()}`);
+            navigate(`/candidate/meeting/${accessCode.toLowerCase()}`);
         } catch (err: any) {
             setJoinError(err.response?.data?.detail || 'Invalid meeting code');
         } finally {
@@ -145,7 +147,7 @@ export function CandidateDashboardPage() {
             <nav className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-50 flex items-center justify-between mb-8 shadow-sm">
                 <div className="flex items-center gap-3">
                     <SenseLogo className="text-blue-600" size={32} />
-                    <span className="text-xl font-semibold text-gray-900 tracking-tight">Sense</span>
+                    <span className="text-xl font-normal text-gray-900 tracking-tight">sense</span>
                 </div>
 
                 <div className="flex items-center gap-6">
@@ -212,13 +214,28 @@ export function CandidateDashboardPage() {
                                             <button
                                                 onClick={() => resumeInputRef.current?.click()}
                                                 disabled={isUploadingResume}
-                                                className={`inline-flex items-center gap-2 py-2.5 px-5 rounded-full font-medium text-sm transition-all ${resumeFilename
+                                                className={`inline-flex items-center gap-2 py-2.5 px-5 rounded-lg font-medium text-sm transition-all ${resumeFilename
                                                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                                     : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-                                                    }`}
+                                                    } ${isUploadingResume ? 'opacity-80 cursor-not-allowed' : ''}`}
                                             >
-                                                <Upload className="w-4 h-4" />
-                                                {isUploadingResume ? 'Uploading...' : (resumeFilename ? 'Update' : 'Upload Resume')}
+                                                {isUploadingResume ? (
+                                                    <>
+                                                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                        </svg>
+                                                        <span className="relative">
+                                                            Uploading
+                                                            <span className="animate-pulse">...</span>
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Upload className="w-4 h-4" />
+                                                        {resumeFilename ? 'Update' : 'Upload Resume'}
+                                                    </>
+                                                )}
                                             </button>
 
                                             {resumeUrl && (
@@ -226,7 +243,7 @@ export function CandidateDashboardPage() {
                                                     href={resumeUrl.startsWith('http') ? resumeUrl : `${BACKEND_URL}${resumeUrl}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-2 py-2.5 px-5 rounded-full font-medium text-sm transition-all bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                                    className="inline-flex items-center gap-2 py-2.5 px-5 rounded-lg font-medium text-sm transition-all bg-blue-50 text-blue-600 hover:bg-blue-100"
                                                 >
                                                     <FileText className="w-4 h-4" />
                                                     View Resume
@@ -238,6 +255,50 @@ export function CandidateDashboardPage() {
                             </div>
                         </div>
 
+                        {/* Scheduled Interviews Card */}
+                        {meetings.length > 0 && (
+                            <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+                                <div className="bg-blue-50 px-6 py-4 border-b border-blue-100 flex items-center justify-between">
+                                    <h2 className="text-lg font-medium text-blue-800 flex items-center gap-2">
+                                        <Calendar className="w-5 h-5" />
+                                        Scheduled Interviews
+                                    </h2>
+                                    <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-medium">
+                                        {meetings.length} pending
+                                    </span>
+                                </div>
+                                <div className="divide-y divide-gray-100">
+                                    {meetings.map((meeting) => (
+                                        <div key={meeting.id} className="p-4 hover:bg-gray-50 transition-colors">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="font-mono text-sm bg-gray-100 px-2 py-0.5 rounded text-gray-700">
+                                                            {meeting.id.toUpperCase()}
+                                                        </span>
+                                                        <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                                                            Active
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-600">
+                                                        Scheduled by <span className="font-medium">{meeting.interviewer_name || meeting.creator_username}</span>
+                                                    </p>
+                                                    <p className="text-xs text-gray-400 mt-1">
+                                                        {new Date(meeting.created_at).toLocaleDateString()} at {new Date(meeting.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => navigate(`/candidate/meeting/${meeting.id}`)}
+                                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-1"
+                                                >
+                                                    Join <ArrowRight className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                     </div>
 
@@ -246,7 +307,7 @@ export function CandidateDashboardPage() {
                         {/* Join Interview Card */}
                         <div className="bg-white rounded-lg border border-gray-300 p-6 shadow-sm">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2 transition-transform transform hover:scale-105">
+                                <div className="p-2">
                                     <SenseLogo className="text-blue-600" size={24} />
                                 </div>
                                 <h3 className="text-lg font-medium text-gray-800">Join Interview</h3>
@@ -261,7 +322,7 @@ export function CandidateDashboardPage() {
                                     }
                                     setIsJoinModalOpen(true);
                                 }}
-                                className="w-full py-3.5 rounded-full font-medium transition-all shadow-md bg-primary hover:bg-blue-600 text-white flex items-center justify-center gap-2"
+                                className="w-full py-3.5 rounded-lg font-medium transition-all shadow-md bg-primary hover:bg-blue-600 text-white flex items-center justify-center gap-2"
                             >
                                 Join Now <ArrowRight className="w-4 h-4" />
                             </button>
@@ -312,6 +373,33 @@ export function CandidateDashboardPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Upload Error Modal */}
+            {uploadError && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+                        <div className="bg-red-50 px-6 py-4 border-b border-red-100">
+                            <h3 className="text-lg font-semibold text-red-800 flex items-center gap-2">
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                                Upload Failed
+                            </h3>
+                        </div>
+                        <div className="px-6 py-5">
+                            <p className="text-gray-700">{uploadError}</p>
+                        </div>
+                        <div className="px-6 py-4 bg-gray-50 flex justify-end">
+                            <button
+                                onClick={() => setUploadError(null)}
+                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

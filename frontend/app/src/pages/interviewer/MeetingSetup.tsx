@@ -181,7 +181,7 @@ export function MeetingSetup() {
                                     </button>
                                 ))}
 
-                                <div className={`flex items-center rounded-full border px-3 py-1.5 transition-all ${isCustom ? 'border-[#1967d2] ring-1 ring-[#1967d2] bg-[#e8f0fe]' : 'border-gray-300 bg-white hover:border-gray-400'
+                                <div className={`flex items-center gap-1 rounded-full border px-3 py-1.5 transition-all ${isCustom ? 'border-[#1967d2] ring-1 ring-[#1967d2] bg-[#e8f0fe]' : 'border-gray-300 bg-white hover:border-gray-400'
                                     }`}>
                                     <input
                                         type="number"
@@ -191,7 +191,7 @@ export function MeetingSetup() {
                                             setCustomDuration(e.target.value);
                                             setIsCustom(true);
                                         }}
-                                        className={`w-12 text-sm outline-none bg-transparent text-center remove-arrow ${isCustom ? 'text-[#1967d2] placeholder-[#aecbfa]' : 'text-gray-900 placeholder-gray-500'
+                                        className={`w-16 text-sm outline-none bg-transparent text-center remove-arrow ${isCustom ? 'text-[#1967d2] placeholder-[#aecbfa]' : 'text-gray-900 placeholder-gray-500'
                                             }`}
                                     />
                                     <span className={`text-xs ${isCustom ? 'text-[#1967d2]' : 'text-gray-500'}`}>min</span>
@@ -199,7 +199,7 @@ export function MeetingSetup() {
                                         <button
                                             onClick={handleCustomSave}
                                             disabled={isSaving}
-                                            className="ml-2 text-[#1967d2] hover:text-[#174ea6]"
+                                            className="ml-1 text-[#1967d2] hover:text-[#174ea6]"
                                         >
                                             <Check className="w-3.5 h-3.5" />
                                         </button>

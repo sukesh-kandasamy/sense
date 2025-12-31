@@ -25,7 +25,9 @@ import { TermsOfServicePage } from './pages/legal/TermsOfServicePage';
 import { CookiePolicyPage } from './pages/legal/CookiePolicyPage';
 import { CandidateDashboardPage } from './pages/candidate/CandidateDashboardPage';
 import { CandidateSettingsPage } from './pages/candidate/CandidateSettingsPage';
+import { CandidateMeetingPage } from './pages/candidate/CandidateMeetingPage';
 import { CandidateLoginPage } from './components/auth/CandidateLoginPage';
+import { GeminiDocsPage } from './pages/docs/GeminiDocsPage';
 import { ROUTES } from './config'; // Added import for ROUTES
 
 function AppRoutes() {
@@ -44,6 +46,7 @@ function AppRoutes() {
             </RequireAuth>
           }
         />
+        <Route path="/docs/gemini" element={<GeminiDocsPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
         <Route path="/policy" element={<CookiePolicyPage />} />
@@ -109,6 +112,14 @@ function AppRoutes() {
           element={
             <RequireAuth allowedRole="candidate">
               <CandidateDashboardPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidate/meeting/:roomId"
+          element={
+            <RequireAuth allowedRole="candidate">
+              <CandidateMeetingPage />
             </RequireAuth>
           }
         />

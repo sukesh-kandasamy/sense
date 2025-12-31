@@ -53,11 +53,12 @@ export function ReportPage() {
                     // Transform Data
                     setReportData({
                         candidateName: data.meeting.candidates?.[0] || "Candidate",
+                        candidatePhoto: data.meeting.candidate_photo ? `${BACKEND_URL}${data.meeting.candidate_photo}` : null,
                         role: "Applicant",
                         date: new Date(data.meeting.created_at).toLocaleDateString(),
                         duration: data.meeting.duration ? `${data.meeting.duration} mins` : "Unknown",
                         overallScore: 85, // Mock score
-                        videoUrl: data.meeting.recording_url ? `${BACKEND_URL}${data.meeting.recording_url}` : "",
+                        videoUrl: data.meeting.recording_url ? `${BACKEND_URL}/auth/meetings/${meetingId}/stream` : "",
                         resumeUrl: data.meeting.resume_url ? `${BACKEND_URL}${data.meeting.resume_url}` : null,
                         sentiment: "Positive",
                         summary: "Session analysis available below.",
@@ -65,15 +66,28 @@ export function ReportPage() {
                         improvements: ["Pacing"]
                     });
 
-                    // Transform Insights
-                    const events = data.insights.map((insight: any) => ({
-                        time: new Date(insight.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                        type: insight.type === 'violation' ? 'CONCERN' : 'NEUTRAL',
-                        title: insight.type.replace('_', ' ').toUpperCase(),
-                        desc: insight.description || "Event detected during interview",
-                        confidence: Math.round((insight.confidence || 0.8) * 100),
-                        focus: 7
-                    }));
+                    // Transform Insights from emotion_data (Sentiment Detection)
+                    const events = data.insights.map((insight: any) => {
+                        const emotionData = insight.emotion_data || {};
+                        const stressLevel = emotionData.stress_level || 'low';
+                        const isHighStress = stressLevel === 'high';
+                        const isPositive = emotionData.engagement_score >= 7 || emotionData.dominant_emotion === 'confident' || emotionData.dominant_emotion === 'enthusiastic';
+
+                        return {
+                            time: new Date(insight.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                            type: isHighStress ? 'CONCERN' : (isPositive ? 'POSITIVE' : 'NEUTRAL'),
+                            title: insight.smart_nudge || emotionData.dominant_emotion?.toUpperCase() || 'Analysis',
+                            desc: emotionData.insight || emotionData.candidate_insight || "Sentiment analysis captured",
+                            confidence: emotionData.confidence_level || emotionData.confidence || 0,
+                            engagement: emotionData.engagement_score || 0,
+                            stressLevel: stressLevel,
+                            facialExpression: emotionData.facial_expression || 'neutral',
+                            bodyLanguage: emotionData.body_language || 'neutral',
+                            vocalTone: emotionData.vocal_tone || 'steady',
+                            interviewerTip: emotionData.interviewer_tip || '',
+                            dominantEmotion: emotionData.dominant_emotion || emotionData.primary || 'neutral'
+                        };
+                    });
                     setTimelineEvents(events);
                 }
             } catch (error) {
@@ -136,14 +150,18 @@ export function ReportPage() {
                     {/* Left Panel: Video Player (Takes up 2 cols) */}
                     <div className="xl:col-span-2 flex flex-col gap-6">
                         <div className="bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 flex-1 relative group">
-                            <ReactPlayer
-                                url={reportData.videoUrl}
-                                width="100%"
-                                height="100%"
-                                controls
-                                playing={false}
-                                style={{ position: 'absolute', top: 0, left: 0 }}
-                            />
+                            {reportData.videoUrl ? (
+                                <video
+                                    src={reportData.videoUrl}
+                                    controls
+                                    className="w-full h-full object-contain"
+                                    style={{ position: 'absolute', top: 0, left: 0 }}
+                                />
+                            ) : (
+                                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                                    <p>No recording available</p>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -184,9 +202,17 @@ export function ReportPage() {
                                                 </a>
                                             )}
                                         </div>
-                                        <div className="h-12 w-12 bg-blue-50 text-blue-700 rounded-full flex items-center justify-center font-bold">
-                                            AM
-                                        </div>
+                                        {reportData.candidatePhoto ? (
+                                            <img
+                                                src={reportData.candidatePhoto}
+                                                alt={reportData.candidateName}
+                                                className="h-12 w-12 rounded-full object-cover border-2 border-blue-100"
+                                            />
+                                        ) : (
+                                            <div className="h-12 w-12 bg-blue-50 text-blue-700 rounded-full flex items-center justify-center font-bold text-xl">
+                                                {reportData.candidateName?.charAt(0).toUpperCase() || 'C'}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Score */}
@@ -267,25 +293,48 @@ export function ReportPage() {
                                                         </div>
                                                         <div className="p-5">
                                                             <div className="flex items-start gap-4 mb-3">
-                                                                <div className="p-2 bg-blue-50 rounded-lg text-blue-600 flex-shrink-0">
+                                                                <div className={`p-2 rounded-lg flex-shrink-0 ${event.type === 'POSITIVE' ? 'bg-green-50 text-green-600' :
+                                                                    event.type === 'CONCERN' ? 'bg-red-50 text-red-600' :
+                                                                        'bg-blue-50 text-blue-600'
+                                                                    }`}>
                                                                     <Brain className="w-5 h-5" />
                                                                 </div>
                                                                 <div>
                                                                     <h4 className="text-sm font-bold text-gray-900 leading-tight mb-1">{event.title}</h4>
                                                                     <p className="text-sm text-gray-600 leading-relaxed">{event.desc}</p>
+                                                                    {event.interviewerTip && (
+                                                                        <p className="text-xs text-blue-600 mt-2 italic">💡 {event.interviewerTip}</p>
+                                                                    )}
                                                                 </div>
                                                             </div>
 
-                                                            {/* Metrics */}
-                                                            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-50">
+                                                            {/* Sentiment Metrics */}
+                                                            <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-gray-100">
                                                                 <div className="text-center p-2 bg-gray-50 rounded-lg">
                                                                     <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Confidence</p>
                                                                     <p className="text-sm font-semibold text-gray-900">{event.confidence}%</p>
                                                                 </div>
                                                                 <div className="text-center p-2 bg-gray-50 rounded-lg">
-                                                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Focus</p>
-                                                                    <p className="text-sm font-semibold text-gray-900">{event.focus}/10</p>
+                                                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Engagement</p>
+                                                                    <p className="text-sm font-semibold text-gray-900">{event.engagement}/10</p>
                                                                 </div>
+                                                                <div className={`text-center p-2 rounded-lg ${event.stressLevel === 'high' ? 'bg-red-50' :
+                                                                    event.stressLevel === 'moderate' ? 'bg-yellow-50' :
+                                                                        'bg-green-50'
+                                                                    }`}>
+                                                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Stress</p>
+                                                                    <p className={`text-sm font-semibold capitalize ${event.stressLevel === 'high' ? 'text-red-700' :
+                                                                        event.stressLevel === 'moderate' ? 'text-yellow-700' :
+                                                                            'text-green-700'
+                                                                        }`}>{event.stressLevel}</p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Body Language Tags */}
+                                                            <div className="flex flex-wrap gap-1.5 mt-3">
+                                                                <span className="text-[10px] px-2 py-1 bg-purple-50 text-purple-700 rounded-full">😊 {event.facialExpression}</span>
+                                                                <span className="text-[10px] px-2 py-1 bg-indigo-50 text-indigo-700 rounded-full">🧍 {event.bodyLanguage}</span>
+                                                                <span className="text-[10px] px-2 py-1 bg-cyan-50 text-cyan-700 rounded-full">🎤 {event.vocalTone}</span>
                                                             </div>
                                                         </div>
                                                     </div>

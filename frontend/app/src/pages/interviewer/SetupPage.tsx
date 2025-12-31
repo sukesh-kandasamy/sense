@@ -5,6 +5,7 @@ import { BACKEND_URL } from '../../config';
 import { InterviewerNavbar } from '../../components/interviewer/InterviewerNavbar';
 import { SenseLogo } from '../../components/icons/SenseIcons';
 import {
+    AlertTriangle, X,
     Video,
     Plus,
     Calendar,
@@ -14,7 +15,8 @@ import {
     CheckCircle,
     Cog,
     Clock,
-    TrendingUp
+    TrendingUp,
+    Mail
 } from 'lucide-react';
 
 interface Meeting {
@@ -34,6 +36,13 @@ export function SetupPage() {
     const [userPhoto, setUserPhoto] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    // Create meeting modal state
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [candidateEmail, setCandidateEmail] = useState('');
+    const [createError, setCreateError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -57,26 +66,48 @@ export function SetupPage() {
     }, []);
 
     const handleCreateMeeting = async () => {
+        if (!candidateEmail.trim()) {
+            setCreateError('Please enter candidate email');
+            return;
+        }
+
+        // Simple email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(candidateEmail)) {
+            setCreateError('Please enter a valid email address');
+            return;
+        }
+
         setIsCreating(true);
+        setCreateError(null);
         try {
-            const res = await axios.post(`${BACKEND_URL}/auth/meetings`, {}, { withCredentials: true });
+            const res = await axios.post(`${BACKEND_URL}/auth/meetings`,
+                { candidate_email: candidateEmail.toLowerCase() },
+                { withCredentials: true }
+            );
             if (res.data?.id) {
+                setShowCreateModal(false);
+                setCandidateEmail('');
                 navigate(`/interviewer/meeting/${res.data.id}/setup`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to create meeting:', err);
-            alert('Failed to create meeting. Please try again.');
+            setCreateError(err.response?.data?.detail || 'Failed to create meeting. Please try again.');
             setIsCreating(false);
         }
     };
 
+
     const handleDeleteMeeting = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this meeting?')) return;
+        setIsDeleting(true);
         try {
             await axios.delete(`${BACKEND_URL}/auth/meetings/${id}`, { withCredentials: true });
             setMeetings(prev => prev.filter(m => m.id !== id));
+            setDeleteModalId(null);
         } catch (err) {
             console.error('Failed to delete meeting:', err);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -89,138 +120,263 @@ export function SetupPage() {
 
     return (
         <div className="min-h-screen bg-[#F8F9FA] font-sans">
+            {/* Delete Confirmation Modal */}
+            {deleteModalId && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+                    <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+                        <div className="flex items-start gap-4">
+                            <div className="p-2 bg-red-100 rounded-full">
+                                <AlertTriangle className="w-6 h-6 text-red-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900">Delete Meeting</h3>
+                                <p className="text-sm text-gray-500 mt-1">Are you sure you want to delete this meeting? This action cannot be undone.</p>
+                            </div>
+                            <button onClick={() => setDeleteModalId(null)} className="text-gray-400 hover:text-gray-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setDeleteModalId(null)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleDeleteMeeting(deleteModalId)}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Meeting Modal - Candidate Email */}
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+                    <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+                        <div className="flex items-start gap-4">
+                            <div className="p-2 bg-blue-100 rounded-full">
+                                <Mail className="w-6 h-6 text-blue-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900">Schedule Interview</h3>
+                                <p className="text-sm text-gray-500 mt-1">Enter the candidate's email address. They must be registered on Sense.</p>
+                            </div>
+                            <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="mt-6">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Candidate Email</label>
+                            <input
+                                type="email"
+                                value={candidateEmail}
+                                onChange={(e) => setCandidateEmail(e.target.value)}
+                                placeholder="candidate@example.com"
+        
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                            />
+                            {createError && (
+                                <p className="text-sm text-red-600 mt-2 flex items-center gap-1">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    {createError}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setShowCreateModal(false)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleCreateMeeting}
+                                disabled={isCreating}
+                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isCreating ? 'Creating...' : 'Create Meeting'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
             <InterviewerNavbar
                 userName={userName}
                 userEmail={userEmail}
                 userPhoto={userPhoto}
             />
 
-            <div className="max-w-7xl mx-auto px-6 py-10">
-                {/* Dashboard Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-                    <div>
-                        <h1 className="text-3xl font-normal text-gray-900 mb-2">Welcome, {userName}</h1>
-                        <p className="text-gray-500 font-light">Manage your scheduled interviews and view reports.</p>
-                    </div>
-
-                    <button
-                        onClick={handleCreateMeeting}
-                        disabled={isCreating}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-medium shadow-sm transition-all hover:shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        <Plus className="w-5 h-5" />
-                        <span>{isCreating ? 'Creating...' : 'New Meeting'}</span>
-                    </button>
-                </div>
-
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                        <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                        <p>Loading your dashboard...</p>
-                    </div>
-                ) : meetings.length === 0 ? (
-                    /* Empty State - Clean Design */
-                    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
-                        <div className="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center mb-6">
-                            <SenseLogo className="text-blue-600 opacity-80" size={40} />
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+                <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+                    {/* Left side - Hero Section */}
+                    <div className="w-full lg:w-1/3 lg:shrink-0">
+                        <div className="lg:sticky lg:top-24 bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm">
+                            <h1 className="text-2xl sm:text-3xl font-normal text-gray-900 mb-3 sm:mb-4 leading-tight">
+                                Smart Interviews for Everyone.
+                            </h1>
+                            <p className="text-gray-500 font-light mb-6 sm:mb-8 leading-relaxed text-sm sm:text-base">
+                                Connect, collaborate, and gain insights with AI-powered video interviews. Accessible and secure for everyone.
+                            </p>
+                            <button
+                                onClick={() => { setShowCreateModal(true); setCreateError(null); setCandidateEmail(''); }}
+                                disabled={isCreating}
+                                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-all hover:shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
+                            >
+                                <Video className="w-5 h-5" />
+                                <span>{isCreating ? 'Creating...' : 'New Meeting'}</span>
+                            </button>
                         </div>
-                        <h3 className="text-xl font-medium text-gray-900 mb-2">No meetings scheduled</h3>
-                        <p className="text-gray-500 text-center max-w-sm mb-8">
-                            Get started by creating a new meeting room for your upcoming interviews.
-                        </p>
-                        <button
-                            onClick={handleCreateMeeting}
-                            disabled={isCreating}
-                            className="px-6 py-2.5 text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 rounded-full transition-colors"
-                        >
-                            Create your first meeting
-                        </button>
                     </div>
-                ) : (
-                    /* Meetings Grid - No wrapper card, direct grid of cards */
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {meetings.map((meeting) => (
-                            <div key={meeting.id} className="group bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200">
-                                <div className="flex items-start justify-between mb-6">
-                                    <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition-colors">
-                                        <Video className="w-6 h-6 text-blue-600" />
-                                    </div>
-                                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${meeting.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                        {meeting.active ? 'Active' : 'Finished'}
-                                    </div>
-                                </div>
 
-                                <h3 className="text-xl font-mono font-medium text-gray-900 tracking-wider mb-2">{meeting.id.toUpperCase()}</h3>
-
-                                <div className="flex items-center gap-4 text-sm text-gray-500 mb-6">
-                                    <div className="flex items-center gap-1.5">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>{new Date(meeting.created_at).toLocaleDateString()}</span>
-                                    </div>
-                                    {meeting.duration && (
-                                        <div className="flex items-center gap-1.5">
-                                            <Clock className="w-4 h-4" />
-                                            <span>{meeting.duration} min</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center gap-2 pt-4 border-t border-gray-50">
-                                    {meeting.active && (
-                                        <>
-                                            <button
-                                                onClick={() => navigate(`/interviewer/meeting/${meeting.id}/setup`)}
-                                                className="flex-1 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors flex items-center justify-center gap-2"
-                                                title="Configure"
-                                            >
-                                                <Cog className="w-4 h-4" /> Configure
-                                            </button>
-
-                                            <div className="w-px h-8 bg-gray-100"></div>
-
-                                            <button
-                                                onClick={() => copyMeetingLink(meeting.id)}
-                                                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${copiedId === meeting.id ? 'text-green-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                                    }`}
-                                                title="Copy Link"
-                                            >
-                                                {copiedId === meeting.id ? <CheckCircle className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                                                {copiedId === meeting.id ? 'Copied' : 'Share'}
-                                            </button>
-
-                                            <div className="w-px h-8 bg-gray-100"></div>
-                                        </>
-                                    )}
-
-                                    <button
-                                        onClick={() => handleDeleteMeeting(meeting.id)}
-                                        className={`p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ${!meeting.active ? 'ml-auto' : ''}`}
-                                        title="Delete"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                                {meeting.active ? (
-                                    <button
-                                        onClick={() => navigate(`/meeting/${meeting.id}`)}
-                                        className="w-full mt-3 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <span>Join Room</span>
-                                        <ArrowRight className="w-4 h-4" />
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={() => navigate(`/interviewer/report/${meeting.id}`)}
-                                        className="w-full mt-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <span>View Insights</span>
-                                        <TrendingUp className="w-4 h-4" />
-                                    </button>
-                                )}
+                    {/* Right side - Meetings list */}
+                    <div className="flex-1">
+                        {isLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                                <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+                                <p>Loading your dashboard...</p>
                             </div>
-                        ))}
+                        ) : meetings.length === 0 ? (
+                            /* Empty State - Clean Design */
+                            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+                                <div className="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center mb-6">
+                                    <Calendar className="w-10 h-10 text-blue-600" />
+                                </div>
+                                <h3 className="text-xl font-medium text-gray-900 mb-2">No meetings scheduled</h3>
+                                <p className="text-gray-500 text-center max-w-sm mb-8">
+                                    Get started by creating a new meeting room for your upcoming interviews.
+                                </p>
+                                <button
+                                    onClick={handleCreateMeeting}
+                                    disabled={isCreating}
+                                    className="px-6 py-2.5 text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                >
+                                    Create your first meeting
+                                </button>
+                            </div>
+                        ) : (
+                            /* Meetings List - Google Material Design Style */
+                            <div className="space-y-3">
+                                {meetings.map((meeting) => (
+                                    <div
+                                        key={meeting.id}
+                                        className="group bg-white rounded-xl border border-gray-200/80 hover:border-gray-300 hover:shadow-lg transition-all duration-300 overflow-hidden"
+                                    >
+                                        <div className="p-3 sm:p-4">
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                                                {/* Icon with status indicator */}
+                                                <div className="flex items-center gap-3 sm:gap-4">
+                                                    <div className="relative">
+                                                        <div className={`p-2.5 sm:p-3 rounded-xl ${meeting.active ? 'bg-blue-50' : 'bg-gray-50'}`}>
+                                                            <Video className={`w-4 h-4 sm:w-5 sm:h-5 ${meeting.active ? 'text-blue-600' : 'text-gray-400'}`} />
+                                                        </div>
+                                                        {meeting.active && (
+                                                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full border-2 border-white" />
+                                                        )}
+                                                    </div>
+
+                                                    {/* Meeting Info */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
+                                                            <h3 className="text-sm sm:text-base font-semibold text-gray-900 tracking-wide font-mono">
+                                                                {meeting.id.toUpperCase()}
+                                                            </h3>
+                                                            <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-medium ${meeting.active
+                                                                ? 'bg-green-100 text-green-700 ring-1 ring-inset ring-green-600/20'
+                                                                : 'bg-gray-100 text-gray-600'
+                                                                }`}>
+                                                                {meeting.active ? '● Active' : 'Finished'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                                                <span>{new Date(meeting.created_at).toLocaleDateString('en-US', {
+                                                                    month: 'short',
+                                                                    day: 'numeric',
+                                                                    year: 'numeric'
+                                                                })}</span>
+                                                            </div>
+                                                            {meeting.duration && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                                                    <span>{meeting.duration} min</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="flex items-center gap-1.5 sm:gap-2 mt-3 sm:mt-0 ml-auto sm:ml-0">
+                                                    {meeting.active && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => navigate(`/interviewer/meeting/${meeting.id}/setup`)}
+                                                                className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                                                title="Configure"
+                                                            >
+                                                                <Cog className="w-4 h-4" />
+                                                            </button>
+
+                                                            <button
+                                                                onClick={() => copyMeetingLink(meeting.id)}
+                                                                className={`p-1.5 sm:p-2 rounded-lg transition-all ${copiedId === meeting.id
+                                                                    ? 'text-green-600 bg-green-50'
+                                                                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                                                                    }`}
+                                                                title="Share"
+                                                            >
+                                                                {copiedId === meeting.id ? <CheckCircle className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                                                            </button>
+                                                        </>
+                                                    )}
+
+                                                    <button
+                                                        onClick={() => setDeleteModalId(meeting.id)}
+                                                        className="p-1.5 sm:p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+
+                                                    <div className="w-px h-5 sm:h-6 bg-gray-200 mx-0.5 sm:mx-1" />
+
+                                                    {meeting.active ? (
+                                                        <button
+                                                            onClick={() => navigate(`/meeting/${meeting.id}`)}
+                                                            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-900 hover:bg-black text-white rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md flex items-center gap-1.5 sm:gap-2"
+                                                        >
+                                                            <span className="hidden xs:inline">Join</span>
+                                                            <span className="xs:hidden">Join</span>
+                                                            <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => navigate(`/interviewer/report/${meeting.id}`)}
+                                                            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md flex items-center gap-1.5 sm:gap-2"
+                                                        >
+                                                            <span className="hidden sm:inline">View Insights</span>
+                                                            <span className="sm:hidden">Insights</span>
+                                                            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );

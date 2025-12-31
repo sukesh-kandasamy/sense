@@ -1,11 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Video, CheckCircle, BarChart2, Shield } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { SenseLogo } from '../../components/icons/SenseIcons';
+import axios from 'axios';
+import { BACKEND_URL } from '../../config';
 
 export function HomePage() {
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Check if user is logged in when they click "Try Sense"
+    const handleTrySense = async () => {
+        setIsLoading(true);
+        try {
+            const response = await axios.get(`${BACKEND_URL}/auth/users/me`, { withCredentials: true });
+            if (response.data && response.data.username) {
+                // User is logged in, redirect to dashboard
+                navigate('/interviewer/dashboard', { replace: true });
+            } else {
+                // Not logged in, go to sign-in
+                navigate('/auth/signin');
+            }
+        } catch (error) {
+            // Not logged in, go to sign-in
+            navigate('/auth/signin');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div className="min-h-screen bg-white flex flex-col">
@@ -18,17 +41,9 @@ export function HomePage() {
                             Sense
                         </span>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <Link to="/auth/candidate/login" className="text-sm font-medium text-gray-600 hover:text-gray-900">
-                            For Candidates
-                        </Link>
-                        <Link to="/signin" className="text-sm font-medium text-gray-600 hover:text-gray-900">
-                            Interviewer Login
-                        </Link>
-                        <Button onClick={() => navigate('/auth/candidate/login')}>
-                            Get Started
-                        </Button>
-                    </div>
+                    <Button onClick={handleTrySense} disabled={isLoading}>
+                        {isLoading ? 'Loading...' : 'Try Sense'}
+                    </Button>
                 </div>
             </nav>
 
@@ -45,17 +60,14 @@ export function HomePage() {
                         </div>
                         <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-gray-900 mb-8">
                             Master your interviews <br />
-                            <span className="text-blue-600">with AI intelligence</span>
+                            <span className="text-blue-600">with sense</span>
                         </h1>
                         <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-10">
                             Sense analyzes your video interviews in real-time, providing actionable insights on confidence, emotion, and speech clarity.
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                            <Button size="lg" className="h-12 px-8 text-lg" onClick={() => navigate('/auth/candidate/login')}>
-                                Start Mock Interview <ArrowRight className="ml-2 w-5 h-5" />
-                            </Button>
-                            <Button variant="outline" size="lg" className="h-12 px-8 text-lg">
-                                Watch Demo
+                        <div className="flex justify-center">
+                            <Button size="lg" className="h-14 px-10 text-lg" onClick={handleTrySense} disabled={isLoading}>
+                                {isLoading ? 'Loading...' : 'Try Sense'} <ArrowRight className="ml-2 w-5 h-5" />
                             </Button>
                         </div>
                     </div>

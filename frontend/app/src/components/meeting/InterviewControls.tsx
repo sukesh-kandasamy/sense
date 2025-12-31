@@ -23,7 +23,7 @@ export function InterviewControls({
 
   return (
     <>
-      <div className="flex justify-center relative z-40">
+      <div className="flex justify-start relative z-40">
         <div className="bg-white rounded-full px-3 py-1.5 shadow-xl flex items-center gap-2 border border-gray-100 ring-1 ring-black/5">
           {/* Microphone Toggle */}
           <button

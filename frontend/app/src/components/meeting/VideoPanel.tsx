@@ -20,8 +20,80 @@ export function VideoPanel({ role, name, isCameraOn, isMicOn, isMain, stream, mu
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+    const videoElement = videoRef.current;
+    if (videoElement && stream) {
+      // Log srcObject setting
+      console.log('[VideoPanel] Setting srcObject:', {
+        streamId: stream.id,
+        active: stream.active,
+        videoTracks: stream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState, label: t.label })),
+        audioTracks: stream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState, label: t.label }))
+      });
+
+      // Set the stream as srcObject
+      videoElement.srcObject = stream;
+
+      // Event handlers for debugging
+      const handlePlay = () => console.log('[VideoPanel] Video event: play');
+      const handlePause = () => console.log('[VideoPanel] Video event: pause');
+      const handleEnded = () => console.log('[VideoPanel] Video event: ended');
+      const handleError = (e: Event) => console.error('[VideoPanel] Video event: error', (e.target as HTMLVideoElement).error);
+      const handleSuspend = () => console.log('[VideoPanel] Video event: suspend');
+      const handleWaiting = () => console.log('[VideoPanel] Video event: waiting');
+      const handleStalled = () => console.log('[VideoPanel] Video event: stalled');
+
+      // Attach event listeners
+      videoElement.addEventListener('play', handlePlay);
+      videoElement.addEventListener('pause', handlePause);
+      videoElement.addEventListener('ended', handleEnded);
+      videoElement.addEventListener('error', handleError);
+      videoElement.addEventListener('suspend', handleSuspend);
+      videoElement.addEventListener('waiting', handleWaiting);
+      videoElement.addEventListener('stalled', handleStalled);
+
+      // Explicitly call play() to ensure autoplay works
+      // Use a small timeout to ensure the video element is ready
+      const playVideo = async () => {
+        try {
+          await videoElement.play();
+          console.log('[VideoPanel] Video playing successfully, readyState:', videoElement.readyState);
+        } catch (err) {
+          console.log('[VideoPanel] Video play failed, retrying...', err);
+          // Retry after a short delay
+          setTimeout(async () => {
+            try {
+              await videoElement.play();
+              console.log('[VideoPanel] Video play retry successful');
+            } catch (e) {
+              console.log('[VideoPanel] Video play retry failed:', e);
+            }
+          }, 500);
+        }
+      };
+
+      // Wait for loadedmetadata to ensure video is ready
+      if (videoElement.readyState >= 2) {
+        console.log('[VideoPanel] Video already has metadata, playing immediately');
+        playVideo();
+      } else {
+        console.log('[VideoPanel] Waiting for loadedmetadata, current readyState:', videoElement.readyState);
+        videoElement.onloadedmetadata = () => {
+          console.log('[VideoPanel] loadedmetadata fired');
+          playVideo();
+        };
+      }
+
+      // Cleanup event listeners
+      return () => {
+        console.log('[VideoPanel] Cleanup: removing event listeners');
+        videoElement.removeEventListener('play', handlePlay);
+        videoElement.removeEventListener('pause', handlePause);
+        videoElement.removeEventListener('ended', handleEnded);
+        videoElement.removeEventListener('error', handleError);
+        videoElement.removeEventListener('suspend', handleSuspend);
+        videoElement.removeEventListener('waiting', handleWaiting);
+        videoElement.removeEventListener('stalled', handleStalled);
+      };
     }
   }, [stream]);
 
@@ -41,10 +113,10 @@ export function VideoPanel({ role, name, isCameraOn, isMicOn, isMain, stream, mu
   };
 
   return (
-    <div className={`bg-black overflow-hidden relative group transition-all duration-500 ${isMain ? 'h-full w-full' : 'absolute inset-0'} border-[3px] ${getPulseColor()}`}>
-      <div className="relative w-full h-full">
+    <div className={`overflow-hidden relative group transition-all duration-500 h-full w-full rounded-xl ${getPulseColor()}`}>
+      <div className="relative w-full h-full ">
         {/* Video Area */}
-        <div className="absolute inset-0 bg-neutral-900 flex items-center justify-center">
+        <div className="absolute inset-0 bg-neutral-900  flex items-center justify-center">
           {stream && isCameraOn ? (
             <>
               <video
@@ -52,7 +124,7 @@ export function VideoPanel({ role, name, isCameraOn, isMicOn, isMain, stream, mu
                 autoPlay
                 playsInline
                 muted={muted} // Local video (waiting state) should usually be muted to prevent echo, or controlled by prop
-                className={`w-full h-full object-cover ${isMirrored ? 'scale-x-[-1]' : ''}`}
+                className={`w-full h-full object-cover  ${isMirrored ? 'scale-x-[-1]' : ''}`}
               />
               {/* Overlay Status Message (if stream exists, e.g. waiting state with local video) */}
               {statusMessage && (
@@ -106,8 +178,8 @@ export function VideoPanel({ role, name, isCameraOn, isMicOn, isMain, stream, mu
         {/* Name overlay - Google Meet Style (Bottom Left) */}
         {/* Only show name if we have a stream AND NO waiting status (connected) AND showName is true */}
         {(stream && !statusMessage && showName) && (
-          <div className="absolute bottom-4 left-4 z-10">
-            <div className="bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-md flex items-center gap-2">
+          <div className="absolute bottom-0.5 right-0.5 z-10">
+            <div className="bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-md flex items-center gap-2">
               <span className="text-white text-sm font-medium tracking-wide">{name}</span>
               {muted && <div className="w-1.5 h-1.5 bg-red-500 rounded-full" title="Muted" />}
             </div>

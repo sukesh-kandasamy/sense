@@ -12,6 +12,7 @@ import { ChevronLeft, ChevronRight, CheckCircle, Clock, AlertTriangle, Share2, C
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
 import { ImperativePanelHandle } from 'react-resizable-panels';
 import { usePageTransition } from '../common/PageTransition';
+import { ResumeViewer } from './ResumeViewer'; // New Import
 
 interface InterviewRoomProps {
   userRole: 'interviewer' | 'candidate';
@@ -46,6 +47,11 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [displayName, setDisplayName] = useState(userName || localStorage.getItem('userName') || 'Guest'); // Name State - reads from localStorage for candidates
 
+  // Resume Viewer State
+  const [sidebarView, setSidebarView] = useState<'insights' | 'resume'>('insights');
+  const [candidateEmail, setCandidateEmail] = useState<string | null>(null);
+  const [resumeAvailable, setResumeAvailable] = useState(false);
+
   // Refs - Moved to top level
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
   const constraintsRef = useRef(null);
@@ -71,6 +77,8 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
   const [meetingDuration, setMeetingDuration] = useState<number | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [timerWarning, setTimerWarning] = useState<'5min' | '1min' | null>(null);
+  const [interviewerJoined, setInterviewerJoined] = useState(false);
+  const [waitingForInterviewer, setWaitingForInterviewer] = useState(false);
 
   // Insights WebSocket Effect
   useEffect(() => {
@@ -83,8 +91,20 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
     // But keeping original structure where feasible
   }, [userRole, hasJoined, analysisMode, roomId]);
 
+  // Mark resume as seen when viewed
+  useEffect(() => {
+    if (sidebarView === 'resume' && candidateEmail) {
+      localStorage.setItem(`seen_resume_${candidateEmail}`, 'true');
+    }
+  }, [sidebarView, candidateEmail]);
+
   // Main Media Initialization Effect
   useEffect(() => {
+    // Mounted flag to prevent state updates after unmount
+    let mounted = true;
+    // Track stream locally to fix stale closure issue in cleanup
+    let localStreamRef: MediaStream | null = null;
+
     // Only initialize media on mount (Lobby)
     const initializeMedia = async () => {
       try {
@@ -93,7 +113,7 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
         // Fetch User Info including Analysis Mode
         try {
           const userRes = await axios.get(`${API_URL}/users/me`, { withCredentials: true });
-          if (userRes.data) {
+          if (userRes.data && mounted) {
             if (userRes.data.email) setUserEmail(userRes.data.email);
             if (userRes.data.full_name) setDisplayName(userRes.data.full_name);
             if (userRes.data.profile_photo_url) setUserAvatar(userRes.data.profile_photo_url);
@@ -102,6 +122,13 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
         } catch (e) {
           console.warn("Could not fetch user info", e);
         }
+
+        // Check if component is still mounted before continuing
+        if (!mounted) {
+          console.log('[Media] Component unmounted during initialization, aborting');
+          return;
+        }
+
 
 
         // Check meeting status first
@@ -112,11 +139,18 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
             else navigateWithTransition('/candidate/thank-you');
             return;
           }
+
+          // Store candidate email for resume viewer (Interviewer only)
+          if (userRole === 'interviewer' && res.data.candidate_email) {
+            setCandidateEmail(res.data.candidate_email);
+            // Check if resume exists (optional optimization, current ResumeViewer handles null)
+            setResumeAvailable(true);
+          }
           // Fetch remaining time from server for timing verification
-          if (res.data.duration) {
+          if (res.data.duration && mounted) {
             setMeetingDuration(res.data.duration);
             const timeRes = await axios.get(`${API_URL}/meetings/${roomId}/remaining-time`, { withCredentials: true });
-            if (timeRes.data.remaining_seconds !== null) {
+            if (timeRes.data.remaining_seconds !== null && mounted) {
               setTimeRemaining(timeRes.data.remaining_seconds);
               if (timeRes.data.is_expired) {
                 if (userRole === 'interviewer') navigateWithTransition('/interviewer/thank-you');
@@ -129,30 +163,66 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
           console.error("Failed to fetch meeting status:", error);
         }
 
+        // Check if component is still mounted before accessing media
+        if (!mounted) {
+          console.log('[Media] Component unmounted before media access, aborting');
+          return;
+        }
+
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          setConnectionStatus('Error: Camera access requires HTTPS or localhost');
+          if (mounted) setConnectionStatus('Error: Camera access requires HTTPS or localhost');
           return;
         }
 
         // Enumerate Devices
         const devices = await navigator.mediaDevices.enumerateDevices();
         const cameras = devices.filter(device => device.kind === 'videoinput');
-        setVideoDevices(cameras);
-        if (cameras.length > 0) {
-          setSelectedDeviceId(cameras[0].deviceId);
+        if (mounted) {
+          setVideoDevices(cameras);
+          if (cameras.length > 0) {
+            setSelectedDeviceId(cameras[0].deviceId);
+          }
+        }
+
+        // Check if component is still mounted before getting user media
+        if (!mounted) {
+          console.log('[Media] Component unmounted before getUserMedia, aborting');
+          return;
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: cameras.length > 0 ? { deviceId: cameras[0].deviceId } : true,
           audio: true
         });
-        console.log("Stream obtained", stream.getAudioTracks());
-        setLocalStream(stream);
-        setConnectionStatus('Ready to join');
+
+        // Store stream locally for cleanup access
+        localStreamRef = stream;
+
+        // Log stream acquisition details
+        const videoTracks = stream.getVideoTracks();
+        const audioTracks = stream.getAudioTracks();
+        console.log('[Media] Stream obtained:', {
+          id: stream.id,
+          videoTracks: videoTracks.map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState, label: t.label })),
+          audioTracks: audioTracks.map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState, label: t.label }))
+        });
+
+        // Only update state if still mounted
+        if (mounted) {
+          setLocalStream(stream);
+          setConnectionStatus('Ready to join');
+        } else {
+          // Component unmounted during async call, clean up the stream
+          console.log('[Media] Component unmounted during stream acquisition, stopping tracks');
+          stream.getTracks().forEach(track => {
+            console.log(`[Media] Stopping track: ${track.kind} - ${track.label}`);
+            track.stop();
+          });
+        }
 
       } catch (err) {
-        console.error('Error accessing media devices:', err);
-        setConnectionStatus('Error accessing camera/mic');
+        console.error('[Media] Error accessing media devices:', err);
+        if (mounted) setConnectionStatus('Error accessing camera/mic');
       }
     };
 
@@ -163,7 +233,20 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
     };
     window.addEventListener('resize', handleResize);
 
+    // Cleanup function with access to local stream ref
     return () => {
+      console.log('[Media] Cleanup triggered, mounted was:', mounted);
+      mounted = false;
+
+      // Stop locally tracked stream (fixes stale closure issue)
+      if (localStreamRef) {
+        console.log('[Media] Stopping locally tracked stream:', localStreamRef.id);
+        localStreamRef.getTracks().forEach(track => {
+          console.log(`[Media] Cleanup stopping track: ${track.kind} - ${track.label} - readyState: ${track.readyState}`);
+          track.stop();
+        });
+      }
+
       cleanup();
       window.removeEventListener('resize', handleResize);
     };
@@ -185,9 +268,17 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
     }
   };
 
-  const handleServerDisconnect = () => {
-    console.log('[WebRTC] Server disconnected. Cleaning up...');
-    setConnectionStatus('Disconnected (Server)');
+  const handleServerDisconnect = (event?: CloseEvent) => {
+    console.log('[WebRTC] Server disconnected:', event?.code, event?.reason);
+    setConnectionStatus(`Disconnected (${event?.code || 'Unknown'})`);
+
+    // Handle Authentication Failure specifically
+    if (event?.code === 1008) {
+      alert("Authorization Failed: " + (event.reason || "You do not have access to this meeting."));
+      if (userRole === 'interviewer') navigate('/interviewer/dashboard');
+      else window.location.href = '/';
+      return;
+    }
 
     // Stop local media (solves "still running" issue)
     if (localStream) {
@@ -212,8 +303,9 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
       insightsWs.current = null;
     }
 
-    // Show End Screen
-    setIsMeetingEnded(true);
+    // DO NOT show End Screen for connection drops
+    // Only show it if specifically intended via handleEndCall (which sets isMeetingEnded)
+    // setIsMeetingEnded(true); 
   };
 
   const connectToRoom = async () => {
@@ -232,11 +324,43 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
         // Send join with our name so peer can display it
         ws.current?.send(JSON.stringify({ type: 'join', name: displayName }));
         console.log('[WebRTC] Sent join message with name:', displayName);
+
+        // Mark meeting as started when interviewer joins (sets started_at timestamp)
+        if (userRole === 'interviewer') {
+          axios.post(`${BACKEND_URL}/auth/meetings/${roomId}/start`, {}, { withCredentials: true })
+            .then(() => console.log('[Meeting] Started successfully'))
+            .catch((e) => console.error('[Meeting] Failed to start:', e));
+        }
+
+        // Store candidate name in database when they join (backend validates interviewer has joined)
+        if (userRole === 'candidate') {
+          const attemptJoin = async () => {
+            try {
+              await axios.post(`${BACKEND_URL}/auth/meetings/${roomId}/join`, { name: displayName }, { withCredentials: true });
+              console.log('[Meeting] Candidate joined successfully');
+              setWaitingForInterviewer(false);
+              // Resend join message to trigger WebRTC signaling now that interviewer is in the room
+              ws.current?.send(JSON.stringify({ type: 'join', name: displayName }));
+              console.log('[WebRTC] Resent join message after interviewer confirmed');
+            } catch (e: any) {
+              if (e.response?.status === 403) {
+                // Interviewer hasn't joined yet - show waiting screen and poll
+                console.log('[Meeting] Waiting for interviewer to join...');
+                setWaitingForInterviewer(true);
+                // Poll every 3 seconds
+                setTimeout(attemptJoin, 3000);
+              } else {
+                console.error('[Meeting] Failed to join:', e);
+              }
+            }
+          };
+          attemptJoin();
+        }
       };
 
-      ws.current.onclose = () => {
-        console.log('[WebRTC] WebSocket closed by server');
-        handleServerDisconnect();
+      ws.current.onclose = (event) => {
+        console.log('[WebRTC] WebSocket closed by server:', event.code, event.reason);
+        handleServerDisconnect(event);
       };
 
       ws.current.onmessage = async (event) => {
@@ -296,7 +420,8 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
     if (userRole !== 'candidate' || !localStream || !hasJoined) return;
 
     // Emotion Analysis WebSocket
-    const emotionUrl = `${WS_BASE_URL}/ws/emotion/${roomId}`;
+    // Note: Backend mounts Gemini router at /api/gemini
+    const emotionUrl = `${WS_BASE_URL}/api/gemini/ws/emotion/${roomId}`;
 
     console.log('[EMOTION] Candidate connecting to emotion analysis:', emotionUrl);
     emotionWs.current = new WebSocket(emotionUrl);
@@ -459,7 +584,8 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
     if (userRole !== 'interviewer' || !hasJoined) return;
 
     // Insights/Nudge WebSocket (for Interviewer)
-    const insightsUrl = `${WS_BASE_URL}/ws/insights/${roomId}`;
+    // Note: Backend mounts Gemini router at /api/gemini
+    const insightsUrl = `${WS_BASE_URL}/api/gemini/ws/insights/${roomId}`;
 
     console.log('[EMOTION] Interviewer connecting to insights:', insightsUrl);
     insightsWs.current = new WebSocket(insightsUrl);
@@ -577,8 +703,29 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
   const handleSignalingMessage = async (message: any) => {
     const pc = peerConnection.current;
 
-    // Handle End Meeting Signal - redirect immediately
+    // Handle End Meeting Signal - upload recording first for candidates
     if (message.type === 'end_meeting') {
+      // For candidates: upload recording before leaving
+      if (userRole === 'candidate' && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        console.log("[Rec] Interviewer ended call - stopping and uploading recording...");
+        mediaRecorderRef.current.onstop = async () => {
+          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+          const formData = new FormData();
+          formData.append('file', blob, 'recording.webm');
+          try {
+            const API_URL = `${BACKEND_URL}/auth`;
+            await axios.post(`${API_URL}/meetings/${roomId}/recording`, formData, { withCredentials: true });
+            console.log("[Rec] Recording uploaded after interviewer ended call");
+          } catch (e) {
+            console.error("[Rec] Upload failed:", e);
+          }
+          cleanup();
+          navigate('/candidate/thank-you');
+        };
+        mediaRecorderRef.current.stop();
+        return;
+      }
+
       cleanup();
       // Redirect to appropriate thank you page
       if (userRole === 'interviewer') {
@@ -611,6 +758,13 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
       }
       console.log('[WebRTC] Peer joined, creating offer...');
       setConnectionStatus(userRole === 'interviewer' ? 'Connecting to candidate...' : 'Connecting to interviewer...');
+
+      // Start timer when candidate joins (for interviewers only)
+      if (userRole === 'interviewer' && meetingDuration && meetingDuration > 0) {
+        console.log('[Timer] Starting interview timer:', meetingDuration, 'minutes');
+        setTimeRemaining(meetingDuration * 60); // Convert to seconds
+      }
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       console.log('[WebRTC] Sending offer:', offer);
@@ -636,7 +790,7 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
 
       // Cleanup and redirect interviewer
       cleanup();
-      setTimeout(() => navigateWithTransition(`/interviewer/insights/${roomId}`), 800);
+      setTimeout(() => navigateWithTransition(`/interviewer/report/${roomId}`), 800);
       return;
     }
 
@@ -848,6 +1002,21 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
             </div>
           )}
 
+          {/* Waiting for Interviewer Overlay (Candidates Only) */}
+          {waitingForInterviewer && userRole === 'candidate' && (
+            <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center">
+              <div className="bg-white rounded-2xl p-8 max-w-md text-center shadow-2xl">
+                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">Waiting for Interviewer</h3>
+                <p className="text-gray-500 mb-4">The interviewer hasn't started the session yet. Please wait...</p>
+                <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+                  <Clock className="w-4 h-4" />
+                  <span>Checking every few seconds</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="h-screen flex flex-col md:flex-row">
             <ResizablePanelGroup direction={isMobile ? "vertical" : "horizontal"}>
               {/* Main Video Area */}
@@ -890,6 +1059,23 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
                       // Pass emotion data to Candidate's video panel (when seen by Interviewer)
                       emotionData={userRole === 'interviewer' ? emotionData : undefined}
                     />
+
+                    {/* Self-View PiP Card - Bottom Right Corner */}
+                    {localStream && (
+                      <div className="absolute bottom-4 right-4 z-40 w-32 h-44 md:w-48 md:h-32 rounded-xl overflow-hidden shadow-lg border-2 border-white/20 bg-black transition-all hover:scale-105">
+                        <VideoPanel
+                          role={userRole}
+                          name="You"
+                          isCameraOn={isCameraOn}
+                          isMicOn={isMicOn}
+                          isMain={false}
+                          stream={localStream}
+                          isMirrored={true}
+                          muted={true}
+                          showName={true}
+                        />
+                      </div>
+                    )}
 
                     {/* Smart Nudge Overlay (Top-Center) */}
                     {userRole === 'interviewer' && (
@@ -938,26 +1124,70 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
                 <div className="h-full flex flex-col   shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-none border-t md:border-t-0 md:border-l border-gray-100">
                   {/* Sidebar Header - Clean, minimal like Google */}
                   <div className="px-4 pt-4 pb-3 flex-shrink-0 flex justify-between items-center">
-                    <h2 className="text-lg font-medium text-gray-900">
+                    <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
                       {userRole === 'interviewer'
-                        ? (remoteStream ? 'Live Insights' : '')
+                        ? (sidebarView === 'resume' ? 'Candidate Resume' : (remoteStream ? 'Live Insights' : 'Waiting...'))
                         : 'Interview Guide'}
                     </h2>
-                    {isMobile && (
-                      <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1">
-                        <ChevronRight className="w-5 h-5 rotate-90 md:rotate-0 text-gray-400" />
-                      </button>
-                    )}
+
+                    <div className="flex items-center gap-1">
+                      {/* Resume Toggle for Interviewer */}
+                      {userRole === 'interviewer' && hasJoined && candidateEmail && (
+                        <div className="relative">
+                          <button
+                            onClick={() => setSidebarView(prev => prev === 'insights' ? 'resume' : 'insights')}
+                            className={`p-1.5 rounded-lg transition-colors ${sidebarView === 'resume'
+                              ? 'bg-blue-100 text-blue-600'
+                              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                              }`}
+                            title={sidebarView === 'resume' ? "Switch to Insights" : "View Resume"}
+                          >
+                            {sidebarView === 'resume' ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+                            )}
+                          </button>
+                          {/* Resume Available Indicator */}
+                          {resumeAvailable && sidebarView !== 'resume' && (
+                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-white"></span>
+                            </span>
+                          )}
+                          {/* Tooltip Popup on first load */}
+                          {resumeAvailable && !localStorage.getItem(`seen_resume_${candidateEmail}`) && sidebarView !== 'resume' && (
+                            <div className="absolute top-10 right-0 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap z-50 animate-bounce">
+                              Resume Available!
+                              <div className="absolute -top-1 right-2 w-2 h-2 bg-blue-600 rotate-45"></div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {isMobile && (
+                        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-1">
+                          <ChevronRight className="w-5 h-5 rotate-90 md:rotate-0 text-gray-400" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto px-4 pb-4 scrollbar-hide">
                     {userRole === 'interviewer' ? (
-                      remoteStream ? (
-                        <EmotionDetector emotionData={emotionData} connected={emotionConnected} />
+                      sidebarView === 'resume' && candidateEmail ? (
+                        <ResumeViewer
+                          candidateEmail={candidateEmail}
+                          onBack={() => setSidebarView('insights')}
+                        />
                       ) : (
-                        <div className="flex flex-col items-center justify-center h-full">
-                          <WaitingRoomShare roomId={roomId} />
-                        </div>
+                        remoteStream ? (
+                          <EmotionDetector emotionData={emotionData} connected={emotionConnected} />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full">
+                            <WaitingRoomShare roomId={roomId} />
+                          </div>
+                        )
                       )
                     ) : (
                       <div className="space-y-4">

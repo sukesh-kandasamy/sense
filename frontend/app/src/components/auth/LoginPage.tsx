@@ -51,24 +51,15 @@ export function LoginPage({ onLogin, isLoading = false }: LoginPageProps) {
         </div>
       )}
 
-      {/* Home Link - Top */}
-      <Link
-        to="/"
-        className="mb-6 flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors"
-      >
-        <Home className="w-4 h-4" />
-        Back to Home
-      </Link>
 
       <div className="w-full max-w-[448px] p-10 md:border md:border-[#dadce0] rounded-[8px] md:bg-white flex flex-col items-center shadow-sm">
         {/* Logo & Header */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2.5 mb-6">
             <SenseLogo className="text-blue-600" size={64} />
-            <span className="text-2xl font-normal text-gray-800 tracking-tight">sense</span>
           </div>
-          <h1 className="text-[24px] font-normal text-gray-900 mb-3 text-center">Welcome to Sense</h1>
-          <p className="text-[16px] text-gray-600 text-center max-w-sm">Log in to the platform to streamline your interview process and unlock intelligent insights.</p>
+          <h1 className="text-[24px] font-normal text-gray-900 mb-3 text-center">Interviewer Login</h1>
+          <p className="text-[16px] text-gray-600 text-center max-w-sm">Sign in to manage interviews and access candidate insights.</p>
         </div>
 
         {/* Login Form */}
@@ -106,12 +97,6 @@ export function LoginPage({ onLogin, isLoading = false }: LoginPageProps) {
             >
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
-          </div>
-
-          <div className="flex justify-start">
-            <a href="#" className="text-sm font-medium text-primary hover:text-blue-700 transition-colors">
-              Forgot email?
-            </a>
           </div>
 
           <div className="flex justify-end pt-4">

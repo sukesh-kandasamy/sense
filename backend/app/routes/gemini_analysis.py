@@ -12,7 +12,10 @@ import json
 import asyncio
 import base64
 from typing import Dict, List, Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status
+from core.dependencies import get_current_user_ws
+from core.database import get_db_connection
+from models import User
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -26,41 +29,48 @@ MODEL = "gemini-2.5-flash"  # Using Gemini 2.5 Flash
 
 
 EMOTION_SYSTEM_PROMPT = """
-Role: You are "Sense," a real-time AI copilot for professional interviewers. 
-Objective: Monitor the candidate's video/audio to provide behavioral intelligence and security (proctoring) alerts.
+Role: You are "Sense," a real-time sentiment detection AI for video interviews.
+Objective: Analyze candidate emotions during video interviews to provide interviewer guidance and improve candidate experience.
 
-**Input Analysis:**
-1. Monitor candidate sentiment and vocal confidence.
-2. **Eye Movement & Screen Focus (CRITICAL):** 
-   - Detect if the candidate's eyes are focused on the laptop/computer screen (normal behavior).
-   - Flag if the candidate is looking AWAY from the screen (left, right, up, down, or off-camera).
-   - Check for frequent eye movements that suggest reading from another source or distraction.
-   - If eyes are consistently not focused on the screen, add "looking_away_from_screen" to proctoring_alerts.
-3. Watch for proctoring anomalies (proxy test-takers, external devices, suspicious behavior).
-4. Evaluate rapport (engagement with the interviewer).
+**Real-Time Sentiment Analysis:**
+1. **Emotional State Detection:** Identify the candidate's current emotional state from facial expressions and body language.
+2. **Confidence Assessment:** Evaluate vocal confidence, clarity, and speech patterns.
+3. **Engagement Level:** Measure how engaged and responsive the candidate is during the conversation.
+4. **Stress Indicators:** Detect signs of nervousness, anxiety, or discomfort that may affect performance.
+5. **Communication Quality:** Assess clarity, articulation, and conversational flow.
 
 **JSON Output Schema:**
 {
-  "dominant_state": "confident | anxious | neutral | hesitant | enthusiastic",
+  "dominant_emotion": "confident | nervous | calm | enthusiastic | hesitant | focused | stressed",
+  "confidence_level": 0-100,
   "engagement_score": 0-10,
-  "eye_focus": "on_screen | looking_left | looking_right | looking_up | looking_down | off_camera",
-  "proctoring_alerts": ["list of suspicious behaviors or empty"],
+  "stress_level": "low | moderate | high",
+  "communication_clarity": "clear | moderate | unclear",
+  "facial_expression": "smiling | neutral | tense | thoughtful | concerned",
+  "body_language": "open | closed | fidgeting | relaxed | leaning_in",
+  "vocal_tone": "steady | shaky | enthusiastic | monotone | warm",
   "smart_nudge": {
-    "action": "Short coaching tip (max 8 words)",
+    "action": "Short coaching tip for interviewer (max 10 words)",
     "priority": "low | medium | high"
   },
-  "technical_capture": [
-    {"topic": "string", "sentiment": "positive | negative | neutral"}
-  ],
-  "pacing": "slow | normal | fast",
-  "insight": "One sentence on why the candidate is feeling this way right now."
+  "candidate_insight": "One sentence describing the candidate's current emotional state and what might be causing it.",
+  "interviewer_tip": "Actionable suggestion for the interviewer to improve the conversation flow."
 }
 
+**Guidance for Interviewers:**
+- Provide real-time coaching tips to help interviewers adapt their approach.
+- Suggest when to slow down, offer encouragement, or change topics.
+- Highlight positive moments (enthusiasm, confidence spikes) to build rapport.
+
+**Candidate Experience Insights:**
+- Track emotional journey throughout the interview.
+- Identify moments of peak stress or confidence.
+- Provide data to help improve future interview experiences.
+
 **Instructions:**
-- If the candidate's eyes are NOT focused on the screen, add "looking_away_from_screen" to proctoring_alerts and set smart_nudge priority to HIGH.
-- If proctoring_alerts are detected, set smart_nudge priority to HIGH.
-- Keep the smart_nudge actionable (e.g., "Candidate looking away; verify focus").
-- Focus on the *shift* in emotion rather than just the current state.
+- Focus on detecting emotional SHIFTS rather than just static states.
+- Prioritize actionable insights that help interviewers in real-time.
+- Be empathetic - the goal is to help both parties have a better experience.
 - Respond ONLY with valid JSON (no markdown, no explanation).
 """
 
@@ -134,10 +144,16 @@ class EmotionAnalysisManager:
             # Save to Database (Sync for simplicity, consider async for prod)
             try:
                 from core.database import get_db_connection
+                from datetime import datetime, timezone, timedelta
+                
+                # Get IST timestamp (UTC+5:30)
+                ist = timezone(timedelta(hours=5, minutes=30))
+                ist_timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
+                
                 conn = get_db_connection()
                 conn.execute(
-                    "INSERT INTO insights (meeting_id, emotion_json, smart_nudge) VALUES (?, ?, ?)",
-                    (room_id, json.dumps(emotion_data), emotion_data.get("smart_nudge", ""))
+                    "INSERT INTO insights (meeting_id, timestamp, emotion_json, smart_nudge) VALUES (?, ?, ?, ?)",
+                    (room_id, ist_timestamp, json.dumps(emotion_data), emotion_data.get("smart_nudge", ""))
                 )
                 conn.commit()
                 conn.close()
@@ -230,8 +246,10 @@ class EmotionAnalysisManager:
             emotion_data = json.loads(response_text)
             
             # Normalize response to ensure backward compatibility
-            # Map new schema fields to old ones if needed
-            if "dominant_state" in emotion_data and "primary" not in emotion_data:
+            # Map new schema fields to old ones
+            if "dominant_emotion" in emotion_data:
+                emotion_data["primary"] = emotion_data["dominant_emotion"]
+            elif "dominant_state" in emotion_data:
                 emotion_data["primary"] = emotion_data["dominant_state"]
             
             # Handle smart_nudge as object or string
@@ -240,16 +258,17 @@ class EmotionAnalysisManager:
                 emotion_data["smart_nudge"] = nudge_obj.get("action", "")
                 emotion_data["smart_nudge_priority"] = nudge_obj.get("priority", "low")
             
-            # Map technical_capture to topic_tags for backward compatibility
-            if "technical_capture" in emotion_data and "topic_tags" not in emotion_data:
-                emotion_data["topic_tags"] = emotion_data["technical_capture"]
+            # Map candidate_insight to insight for backward compatibility
+            if "candidate_insight" in emotion_data and "insight" not in emotion_data:
+                emotion_data["insight"] = emotion_data["candidate_insight"]
             
-            # Add default values
-            if "heartRate" not in emotion_data: emotion_data["heartRate"] = 72
-            if "blinkRate" not in emotion_data: emotion_data["blinkRate"] = 15
-            if "confidence" not in emotion_data: emotion_data["confidence"] = emotion_data.get("engagement_score", 7) * 10
+            # Map confidence_level to confidence for backward compatibility
+            if "confidence_level" in emotion_data:
+                emotion_data["confidence"] = emotion_data["confidence_level"]
+            elif "confidence" not in emotion_data:
+                emotion_data["confidence"] = emotion_data.get("engagement_score", 7) * 10
             
-            print(f"[GEMINI] ✓ Analysis complete: {emotion_data.get('primary', emotion_data.get('dominant_state'))} | Priority: {emotion_data.get('smart_nudge_priority', 'N/A')}")
+            print(f"[GEMINI] ✓ Sentiment: {emotion_data.get('primary')} | Confidence: {emotion_data.get('confidence')}% | Priority: {emotion_data.get('smart_nudge_priority', 'N/A')}")
             return emotion_data
             
         except Exception as e:
@@ -260,38 +279,43 @@ class EmotionAnalysisManager:
         """Generate mock emotion data for testing without API key."""
         import random
         
-        states = ["confident", "anxious", "neutral", "hesitant", "enthusiastic"]
-        dominant_state = random.choice(states)
+        emotions = ["confident", "nervous", "calm", "enthusiastic", "hesitant", "focused", "stressed"]
+        dominant_emotion = random.choice(emotions)
         
         nudges = {
-            "anxious": {"action": "Slow down; give them space", "priority": "medium"},
-            "hesitant": {"action": "Rephrase your question", "priority": "medium"},
-            "confident": {"action": "Push with a harder question", "priority": "low"},
-            "neutral": {"action": "", "priority": "low"},
-            "enthusiastic": {"action": "Build on their energy", "priority": "low"}
+            "nervous": {"action": "Slow down and offer reassurance", "priority": "medium"},
+            "hesitant": {"action": "Rephrase or simplify your question", "priority": "medium"},
+            "confident": {"action": "Challenge with a follow-up question", "priority": "low"},
+            "calm": {"action": "Good pace, continue as is", "priority": "low"},
+            "enthusiastic": {"action": "Build on their energy", "priority": "low"},
+            "focused": {"action": "Let them complete their thought", "priority": "low"},
+            "stressed": {"action": "Take a brief pause or change topic", "priority": "high"}
         }
-
-        topics = [
-            {"topic": "React", "sentiment": "positive"},
-            {"topic": "System Design", "sentiment": "neutral"},
-            {"topic": "Python", "sentiment": "positive"}
-        ]
         
-        # Convert to legacy format for frontend compatibility
+        stress_levels = ["low", "moderate", "high"]
+        facial_expressions = ["smiling", "neutral", "tense", "thoughtful", "concerned"]
+        body_languages = ["open", "closed", "fidgeting", "relaxed", "leaning_in"]
+        vocal_tones = ["steady", "shaky", "enthusiastic", "monotone", "warm"]
+        
+        confidence = random.randint(40, 95)
+        engagement = random.randint(4, 10)
+        
         return {
-            "primary": dominant_state,  # Map dominant_state to primary for backward compatibility
-            "dominant_state": dominant_state,
-            "confidence": random.randint(60, 95),
-            "engagement_score": random.randint(5, 10),
-            "proctoring_alerts": [],
-            "smart_nudge": nudges.get(dominant_state, {"action": "", "priority": "low"}).get("action", ""),
-            "smart_nudge_priority": nudges.get(dominant_state, {"action": "", "priority": "low"}).get("priority", "low"),
-            "topic_tags": random.sample(topics, k=random.randint(0, 2)) if random.random() > 0.5 else [],
-            "technical_capture": random.sample(topics, k=random.randint(0, 2)) if random.random() > 0.5 else [],
-            "pacing": random.choice(["slow", "normal", "fast"]),
-            "insight": "Mock data - Set GOOGLE_API_KEY for real analysis",
-            "heartRate": random.randint(65, 85),
-            "blinkRate": random.randint(12, 20),
+            "primary": dominant_emotion,
+            "dominant_emotion": dominant_emotion,
+            "confidence_level": confidence,
+            "confidence": confidence,
+            "engagement_score": engagement,
+            "stress_level": random.choice(stress_levels),
+            "communication_clarity": random.choice(["clear", "moderate", "unclear"]),
+            "facial_expression": random.choice(facial_expressions),
+            "body_language": random.choice(body_languages),
+            "vocal_tone": random.choice(vocal_tones),
+            "smart_nudge": nudges.get(dominant_emotion, {"action": "", "priority": "low"}).get("action", ""),
+            "smart_nudge_priority": nudges.get(dominant_emotion, {"action": "", "priority": "low"}).get("priority", "low"),
+            "candidate_insight": "Mock data - Set GOOGLE_API_KEY for real sentiment analysis",
+            "insight": "Mock data - Set GOOGLE_API_KEY for real sentiment analysis",
+            "interviewer_tip": "Consider the candidate's comfort level and adjust accordingly",
         }
 
 
@@ -302,7 +326,7 @@ emotion_manager = EmotionAnalysisManager()
 # --- WebSocket Endpoints ---
 
 @router.websocket("/ws/emotion/{room_id}")
-async def emotion_analysis_endpoint(websocket: WebSocket, room_id: str):
+async def emotion_analysis_endpoint(websocket: WebSocket, room_id: str, user: User = Depends(get_current_user_ws)):
     """
     WebSocket endpoint for candidates to send video/audio for emotion analysis.
     
@@ -314,6 +338,46 @@ async def emotion_analysis_endpoint(websocket: WebSocket, room_id: str):
     }
     """
     room_id = room_id.lower()
+    
+    # --- Authorization Check ---
+    is_authorized = False
+    if user.role == "candidate":
+        conn = get_db_connection()
+        meeting = conn.execute("SELECT * FROM meetings WHERE id = ?", (room_id,)).fetchone()
+        conn.close()
+        
+        # Check if meeting exists and user is the candidate
+        if meeting:
+            if meeting["candidate_email"] == user.email:
+                is_authorized = True
+            elif user.username == f"candidate_{room_id}":
+                is_authorized = True
+    
+    if not is_authorized:
+        print(f"[EMOTION] Unauthorized candidate access attempt for room {room_id} by {user.username}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    # --- Check if analysis is enabled (local mode = skip analysis) ---
+    conn = get_db_connection()
+    meeting = conn.execute("SELECT creator_username FROM meetings WHERE id = ?", (room_id,)).fetchone()
+    if meeting:
+        creator = conn.execute("SELECT analysis_mode FROM users WHERE username = ?", (meeting["creator_username"],)).fetchone()
+        if creator and creator["analysis_mode"] == "local":
+            print(f"[EMOTION] Skipping analysis for room '{room_id}' - Local mode enabled by interviewer")
+            conn.close()
+            await emotion_manager.connect_candidate(websocket, room_id)
+            # Keep connection alive but don't process analysis
+            try:
+                while True:
+                    data = await websocket.receive_json()
+                    if data.get("type") == "ping":
+                        await websocket.send_json({"type": "pong"})
+            except WebSocketDisconnect:
+                emotion_manager.disconnect_candidate(room_id)
+            return
+    conn.close()
+
     await emotion_manager.connect_candidate(websocket, room_id)
     
     try:
@@ -344,7 +408,7 @@ async def emotion_analysis_endpoint(websocket: WebSocket, room_id: str):
 
 
 @router.websocket("/ws/insights/{room_id}")
-async def insights_endpoint(websocket: WebSocket, room_id: str):
+async def insights_endpoint(websocket: WebSocket, room_id: str, user: User = Depends(get_current_user_ws)):
     """
     WebSocket endpoint for interviewers to receive real-time emotion insights.
     
@@ -355,6 +419,23 @@ async def insights_endpoint(websocket: WebSocket, room_id: str):
     }
     """
     room_id = room_id.lower()
+    
+    # --- Authorization Check ---
+    is_authorized = False
+    if user.role == "interviewer":
+        conn = get_db_connection()
+        meeting = conn.execute("SELECT * FROM meetings WHERE id = ?", (room_id,)).fetchone()
+        conn.close()
+        
+        # Check if meeting exists and user is the creator
+        if meeting and meeting["creator_username"] == user.username:
+            is_authorized = True
+            
+    if not is_authorized:
+        print(f"[EMOTION] Unauthorized interviewer access attempt for room {room_id} by {user.username}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await emotion_manager.connect_interviewer(websocket, room_id)
     
     try:
@@ -384,3 +465,48 @@ async def emotion_status():
             for room, connections in emotion_manager.interviewer_connections.items()
         }
     }
+
+
+# --- HTTP Endpoint for Direct Gemini Analysis ---
+from pydantic import BaseModel
+from typing import Optional
+
+class AnalyzeRequest(BaseModel):
+    frame: str  # Base64 encoded image
+    frames_count: Optional[int] = 1
+    audio: Optional[str] = None
+
+@router.post("/analyze")
+async def analyze_frame(request: AnalyzeRequest):
+    """
+    HTTP endpoint for analyzing a single frame via Gemini API.
+    Used by the Gemini docs page for demonstration.
+    """
+    try:
+        emotion_data = await emotion_manager.analyze_multimodal(
+            room_id="docs-demo",
+            frame_data=request.frame,
+            audio_data=request.audio
+        )
+        
+        if emotion_data:
+            return {
+                "success": True,
+                "emotion_data": emotion_data,
+                "frames_analyzed": request.frames_count
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Analysis returned no data",
+                "emotion_data": emotion_manager._generate_mock_emotion()
+            }
+            
+    except Exception as e:
+        print(f"[GEMINI] Analyze endpoint error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "emotion_data": emotion_manager._generate_mock_emotion()
+        }
+

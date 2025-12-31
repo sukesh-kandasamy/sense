@@ -42,12 +42,14 @@ def reset():
             CREATE TABLE IF NOT EXISTS meetings (
                 id TEXT PRIMARY KEY,
                 creator_username TEXT,
+                candidate_email TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 started_at TIMESTAMP,
                 ended_at TIMESTAMP,
                 active INTEGER DEFAULT 1,
                 duration INTEGER,
                 recording_url TEXT,
+                interviewer_joined INTEGER DEFAULT 0,
                 FOREIGN KEY(creator_username) REFERENCES users(username)
             )
         ''')

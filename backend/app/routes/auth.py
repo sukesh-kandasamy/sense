@@ -147,14 +147,18 @@ async def upload_photo(file: UploadFile = File(...), current_user: User = Depend
         raise HTTPException(status_code=400, detail="Invalid file type. Only images allowed.")
 
     filename = f"{current_user.username}_{int(datetime.now().timestamp())}.{file_extension}"
-    file_path = f"uploads/{filename}"
+    
+    # Ensure profile directory exists
+    os.makedirs("uploads/profile", exist_ok=True)
+    
+    file_path = f"uploads/profile/{filename}"
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
     # Construct URL (Assuming served from /uploads)
     # Ideally should use a proper base URL from config
-    photo_url = f"/uploads/{filename}"
+    photo_url = f"/uploads/profile/{filename}"
     
     conn = get_db_connection()
     conn.execute("UPDATE users SET profile_photo_url = ? WHERE username = ?", (photo_url, current_user.username))
@@ -211,24 +215,32 @@ async def login_candidate(login_request: CodeLoginRequest, response: Response):
     return {"message": "Login successful"}
 
 class CreateMeetingRequest(PydanticBaseModel):
+    candidate_email: str  # Required - must be a registered user
     id: Optional[str] = None  # Optional custom meeting ID
     duration: Optional[int] = None  # Duration in minutes, None = infinity
 
 @router.post("/meetings", response_model=Meeting)
-async def create_meeting(request: CreateMeetingRequest = None, current_user: User = Depends(get_current_interviewer)):
+async def create_meeting(request: CreateMeetingRequest, current_user: User = Depends(get_current_interviewer)):
+    # Validate candidate email exists in database
+    conn = get_db_connection()
+    candidate = conn.execute("SELECT username, email FROM users WHERE email = ?", (request.candidate_email.lower(),)).fetchone()
+    
+    if not candidate:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Candidate not registered. They must create an account first.")
+    
     # Use provided ID or generate one
-    if request and request.id:
+    if request.id:
         meeting_id = request.id.lower()
     else:
         # Simple ID generation: 8 chars alphanumeric
         meeting_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
     
-    duration = request.duration if request else None
+    duration = request.duration
     
-    conn = get_db_connection()
     conn.execute(
-        "INSERT INTO meetings (id, creator_username, duration) VALUES (?, ?, ?)",
-        (meeting_id, current_user.username, duration)
+        "INSERT INTO meetings (id, creator_username, candidate_email, duration) VALUES (?, ?, ?, ?)",
+        (meeting_id, current_user.username, request.candidate_email.lower(), duration)
     )
     conn.commit()
     conn.close()
@@ -312,6 +324,31 @@ async def get_meetings(
     conn.close()
     return results
 
+@router.get("/candidate/meetings")
+async def get_candidate_meetings(current_user: User = Depends(get_current_user)):
+    """Get all meetings scheduled for the current candidate (by email)."""
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    
+    # Find meetings where this user's email is the candidate_email
+    meetings_rows = conn.execute(
+        """SELECT m.*, u.full_name as interviewer_name, u.email as interviewer_email 
+           FROM meetings m 
+           LEFT JOIN users u ON m.creator_username = u.username 
+           WHERE m.candidate_email = ? AND m.active = 1
+           ORDER BY m.created_at DESC""", 
+        (current_user.email.lower(),)
+    ).fetchall()
+    
+    results = []
+    for row in meetings_rows:
+        meeting_dict = dict(row)
+        meeting_dict['active'] = bool(meeting_dict.get('active', 1))
+        results.append(meeting_dict)
+    
+    conn.close()
+    return results
+
 @router.post("/meetings/{meeting_id}/join")
 async def join_meeting(meeting_id: str, join_req: CandidateJoinRequest, current_user: User = Depends(get_current_user)):
     # Verify meeting exists
@@ -321,6 +358,11 @@ async def join_meeting(meeting_id: str, join_req: CandidateJoinRequest, current_
     if not meeting:
         conn.close()
         raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Check if interviewer has joined first
+    if not meeting['interviewer_joined']:
+        conn.close()
+        raise HTTPException(status_code=403, detail="Please wait for the interviewer to start the session")
 
     # Store candidate info
     conn.execute(
@@ -330,6 +372,8 @@ async def join_meeting(meeting_id: str, join_req: CandidateJoinRequest, current_
     conn.commit()
     conn.close()
     
+    return {"message": "Joined successfully"}
+
 
 @router.post("/meetings/{meeting_id}/end")
 async def end_meeting(meeting_id: str, current_user: User = Depends(get_current_user)):
@@ -345,12 +389,27 @@ async def end_meeting(meeting_id: str, current_user: User = Depends(get_current_
     if meeting['creator_username'] != current_user.username:
         conn.close()
         raise HTTPException(status_code=403, detail="Not authorized to end this meeting")
+    
+    # Calculate duration if started_at is set
+    duration_minutes = None
+    ended_at = datetime.utcnow()
+    
+    if meeting['started_at']:
+        try:
+            started_time = datetime.fromisoformat(str(meeting['started_at']).replace(' ', 'T'))
+            elapsed_seconds = (ended_at - started_time).total_seconds()
+            duration_minutes = int(elapsed_seconds / 60)  # Convert to minutes
+        except Exception as e:
+            print(f"[Meeting] Failed to calculate duration: {e}")
         
-    conn.execute("UPDATE meetings SET active = 0 WHERE id = ?", (meeting_id,))
+    conn.execute(
+        "UPDATE meetings SET active = 0, ended_at = ?, duration = ? WHERE id = ?", 
+        (ended_at, duration_minutes, meeting_id)
+    )
     conn.commit()
     conn.close()
     
-    return {"message": "Meeting ended successfully"}
+    return {"message": "Meeting ended successfully", "duration_minutes": duration_minutes}
 
 @router.get("/meetings/{meeting_id}", response_model=Meeting)
 async def get_meeting_details(meeting_id: str):
@@ -364,6 +423,7 @@ async def get_meeting_details(meeting_id: str):
         
     meeting_dict = dict(meeting)
     meeting_dict['active'] = bool(meeting_dict['active'])
+    meeting_dict['interviewer_joined'] = bool(meeting_dict.get('interviewer_joined', 0))
     return Meeting(**meeting_dict)
 
 class UpdateMeetingRequest(PydanticBaseModel):
@@ -408,8 +468,8 @@ async def start_meeting(meeting_id: str, current_user: User = Depends(get_curren
         conn.close()
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    # Set started_at to current time
-    conn.execute("UPDATE meetings SET started_at = ? WHERE id = ?", (datetime.utcnow(), meeting_id))
+    # Set started_at to current time and mark interviewer as joined
+    conn.execute("UPDATE meetings SET started_at = ?, interviewer_joined = 1 WHERE id = ?", (datetime.utcnow(), meeting_id))
     conn.commit()
     conn.close()
     
@@ -578,21 +638,28 @@ async def get_meeting_report(meeting_id: str):
         
         conn.close()
         raise HTTPException(status_code=404, detail="Meeting not found")
-        
-    # Get Candidate Name
+    
+    # Create meeting dict first
+    meeting_dict = dict(meeting)
+    
+    # Get Candidate Name and Profile Photo
     candidates = conn.execute("SELECT name FROM candidates WHERE meeting_id = ?", (meeting_id,)).fetchall()
     candidate_names = [c['name'] for c in candidates]
+    candidate_photo = None
     
-    if not candidate_names:
-        # Fallback: Check if a candidate user exists for this meeting (username pattern: candidate_{meeting_id})
-        candidate_row = conn.execute("SELECT full_name, resume_url FROM users WHERE username = ?", (f"candidate_{meeting_id}",)).fetchone()
-        if candidate_row:
-             candidate_user = dict(candidate_row)
-             if candidate_user['full_name']:
-                 candidate_names.append(candidate_user['full_name'])
-             if candidate_user['resume_url']:
-                 # Add resume URL to meeting dict (assuming single candidate for now or just attaching to meeting)
-                 meeting_dict['resume_url'] = candidate_user['resume_url']
+    # Fallback: Check if a candidate user exists for this meeting (username pattern: candidate_{meeting_id})
+    candidate_row = conn.execute("SELECT full_name, resume_url, profile_photo_url FROM users WHERE username = ?", (f"candidate_{meeting_id}",)).fetchone()
+    if candidate_row:
+         candidate_user = dict(candidate_row)
+         if not candidate_names and candidate_user['full_name']:
+             candidate_names.append(candidate_user['full_name'])
+         if candidate_user.get('resume_url'):
+             meeting_dict['resume_url'] = candidate_user['resume_url']
+         if candidate_user.get('profile_photo_url'):
+             candidate_photo = candidate_user['profile_photo_url']
+    
+    meeting_dict['candidates'] = candidate_names
+    meeting_dict['candidate_photo'] = candidate_photo
     
     # Get Insights
     insights = conn.execute(
@@ -612,15 +679,67 @@ async def get_meeting_report(meeting_id: str):
         
     conn.close()
     
-    meeting_dict = dict(meeting)
-    meeting_dict['candidates'] = candidate_names
-    
     return {
         "meeting": meeting_dict,
         "insights": insight_list
     }
 
 GOOGLE_API_KEY = "AIzaSyCrrM7-ZbirYUSmUTC0Lvm0P0niskY8O3c"
+
+
+async def parse_resume_with_gemini(content: bytes, mime_type: str) -> dict:
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=GOOGLE_API_KEY)
+        
+        prompt = """
+        Analyze this resume/CV and extract structured data in the following JSON format.
+        
+        Requirements:
+        1. summary: A concise summary of the candidate's profile (max 50 words).
+        2. personal_info: object with name, email, phone, location, etc.
+        3. experience: array of work experience objects (job_title, company, duration, description).
+        4. skills_soft: array of soft skills.
+        5. skills_hard: array of hard/technical skills.
+        6. projects: array of project objects (title, description, tech_stack).
+        7. education: array of education objects (degree, institution, year).
+        8. achievements: array of strings.
+        9. links: object with portfolio, linkedin, instagram, etc (only if present).
+        10. others: object with any other relevant sections (languages, hobbies, etc) (only if present).
+        
+        Response Format:
+        {
+            "summary": "...",
+            "personal_info": {},
+            "experience": [],
+            "skills_soft": [],
+            "skills_hard": [],
+            "projects": [],
+            "achievements": [],
+            "education": [],
+            "links": {},
+            "others": {}
+        }
+        """
+        
+        def call_gemini():
+            return client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    types.Content(parts=[
+                        types.Part.from_bytes(data=content, mime_type=mime_type),
+                        types.Part.from_text(text=prompt)
+                    ])
+                ],
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
+
+        response = await asyncio.to_thread(call_gemini)
+        return json.loads(response.text)
+    except Exception as e:
+        print(f"Gemini Parsing Error: {e}")
+        return {}
 
 async def validate_resume_with_gemini(content: bytes, mime_type: str) -> bool:
     try:
@@ -668,7 +787,7 @@ async def upload_resume(
             detail="The uploaded file does not appear to be a valid Resume/CV. Please upload a valid resume."
         )
         
-    # Save
+    # Save File
     upload_dir = "uploads/resumes"
     os.makedirs(upload_dir, exist_ok=True)
     filename = f"{current_user.username}_{int(datetime.now().timestamp())}_{file.filename}"
@@ -679,17 +798,102 @@ async def upload_resume(
         
     resume_url = f"/uploads/resumes/{filename}"
     
-    # DB update
+    # Parse Data
+    parsed_data = await parse_resume_with_gemini(content, mime_type)
+    
+    # DB Update (User Table)
     conn = get_db_connection()
     conn.execute(
         "UPDATE users SET resume_url = ?, resume_filename = ? WHERE username = ?", 
         (resume_url, file.filename, current_user.username)
     )
+    
+    # DB Upsert (Resume Data Table)
+    # Check if entry exists
+    existing = conn.execute("SELECT id FROM resume_data WHERE user_email = ?", (current_user.email,)).fetchone()
+    
+    raw_json = json.dumps(parsed_data)
+    
+    if existing:
+        conn.execute("""
+            UPDATE resume_data SET 
+                summary=?, personal_info=?, experience=?, skills_soft=?, skills_hard=?, 
+                projects=?, achievements=?, certifications=?, education=?, links=?, others=?, raw_json=?, updated_at=?
+            WHERE user_email=?
+        """, (
+            parsed_data.get('summary'),
+            json.dumps(parsed_data.get('personal_info')),
+            json.dumps(parsed_data.get('experience')),
+            json.dumps(parsed_data.get('skills_soft')),
+            json.dumps(parsed_data.get('skills_hard')),
+            json.dumps(parsed_data.get('projects')),
+            json.dumps(parsed_data.get('achievements')),
+            json.dumps(parsed_data.get('certifications')),
+            json.dumps(parsed_data.get('education')),
+            json.dumps(parsed_data.get('links')),
+            json.dumps(parsed_data.get('others')),
+            raw_json,
+            datetime.utcnow(),
+            current_user.email
+        ))
+    else:
+        conn.execute("""
+            INSERT INTO resume_data (
+                user_email, summary, personal_info, experience, skills_soft, skills_hard, 
+                projects, achievements, certifications, education, links, others, raw_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            current_user.email,
+            parsed_data.get('summary'),
+            json.dumps(parsed_data.get('personal_info')),
+            json.dumps(parsed_data.get('experience')),
+            json.dumps(parsed_data.get('skills_soft')),
+            json.dumps(parsed_data.get('skills_hard')),
+            json.dumps(parsed_data.get('projects')),
+            json.dumps(parsed_data.get('achievements')),
+            json.dumps(parsed_data.get('certifications')),
+            json.dumps(parsed_data.get('education')),
+            json.dumps(parsed_data.get('links')),
+            json.dumps(parsed_data.get('others')),
+            raw_json
+        ))
+    
     conn.commit()
     conn.close()
     
     return {
-        "message": "Resume uploaded successfully", 
+        "message": "Resume uploaded and processed successfully", 
         "resume_url": resume_url,
-        "filename": file.filename
+        "filename": file.filename,
+        "summary": parsed_data.get('summary')
     }
+
+@router.get("/users/{email}/resume-data")
+async def get_resume_data(email: str, current_user: User = Depends(get_current_user)):
+    # Security: Allow if asking for self OR if interviewer
+    is_self = (current_user.email == email)
+    is_interviewer = (current_user.role == "interviewer")
+    
+    if not (is_self or is_interviewer):
+        raise HTTPException(status_code=403, detail="Not authorized to view this resume data")
+
+    conn = get_db_connection()
+    row = conn.execute("SELECT * FROM resume_data WHERE user_email = ?", (email,)).fetchone()
+    conn.close()
+    
+    if not row:
+        return {} # Return empty if no data yet
+        
+    data = dict(row)
+    
+    # Parse JSON fields
+    json_fields = ['personal_info', 'experience', 'skills_soft', 'skills_hard', 'projects', 'achievements', 'certifications', 'education', 'links', 'others']
+    for field in json_fields:
+        try:
+            if data.get(field):
+                data[field] = json.loads(data[field])
+        except:
+            data[field] = None
+            
+    return data
+

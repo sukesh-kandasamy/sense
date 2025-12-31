@@ -94,6 +94,28 @@ def init_db():
             FOREIGN KEY(meeting_id) REFERENCES meetings(id)
         )
     ''')
+    
+    # Resume Data Table - NEW (for parsed resume content)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS resume_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT UNIQUE,
+            summary TEXT,
+            personal_info TEXT,          -- JSON
+            skills_soft TEXT,            -- JSON array
+            skills_hard TEXT,            -- JSON array
+            projects TEXT,               -- JSON array
+            achievements TEXT,           -- JSON array
+            certifications TEXT,         -- JSON array
+            education TEXT,              -- JSON array
+            links TEXT,                  -- JSON (portfolio, linkedin, instagram)
+            others TEXT,                 -- JSON
+            raw_json TEXT,               -- Full parsed data as JSON backup
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_email) REFERENCES users(email)
+        )
+    ''')
 
     # Migration for Recording and Ended At
     try:
@@ -103,6 +125,16 @@ def init_db():
         
     try:
         conn.execute("ALTER TABLE meetings ADD COLUMN ended_at TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass # Column likely exists
+
+    try:
+        conn.execute("ALTER TABLE meetings ADD COLUMN candidate_email TEXT")
+    except sqlite3.OperationalError:
+        pass # Column likely exists
+
+    try:
+        conn.execute("ALTER TABLE resume_data ADD COLUMN experience TEXT")
     except sqlite3.OperationalError:
         pass # Column likely exists
 

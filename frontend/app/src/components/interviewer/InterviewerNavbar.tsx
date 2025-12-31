@@ -27,13 +27,13 @@ export function InterviewerNavbar({ userName, userEmail, userPhoto }: Interviewe
 
     return (
         <div className="bg-white border-b border-gray-200 sticky top-0 z-50">
-            <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
                 {/* Logo Section */}
                 <div onClick={() => navigate('/interviewer/dashboard')} className="flex items-center gap-2 cursor-pointer group">
-                    <div className="p-2 transition-transform transform group-hover:scale-105">
+                    <div className="p-2">
                         <SenseLogo className="text-blue-600" size={32} />
                     </div>
-                    <span className="text-xl font-bold text-gray-900 tracking-tight">Sense</span>
+                    <span className="text-xl font-normal text-gray-900 tracking-tight">sense</span>
                 </div>
 
                 {/* User Actions */}

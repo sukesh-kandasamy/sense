@@ -36,6 +36,9 @@ class UserCreate(User):
 class Meeting(BaseModel):
     id: str
     creator_username: str
+    candidate_email: Optional[str] = None
+    interviewer_email: Optional[str] = None
+    interviewer_name: Optional[str] = None
     created_at: Optional[datetime]
     active: bool
     duration: Optional[int] = None  # Duration in minutes, None = infinity
@@ -57,3 +60,17 @@ class CandidateJoinRequest(BaseModel):
 
 class MeetingSummary(Meeting):
     candidates: list[str] = []
+
+class ResumeData(BaseModel):
+    summary: Optional[str] = None
+    personal_info: Optional[dict] = None
+    experience: Optional[list[dict]] = None
+    skills_soft: Optional[list[str]] = None
+    skills_hard: Optional[list[str]] = None
+    projects: Optional[list[dict]] = None
+    achievements: Optional[list[str]] = None
+    certifications: Optional[list[str]] = None
+    education: Optional[list[dict]] = None
+    links: Optional[dict] = None
+    others: Optional[dict] = None
+

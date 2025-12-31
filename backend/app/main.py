@@ -24,7 +24,7 @@ app.add_middleware(
 # Include Routers
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(signaling_router, tags=["Signaling"])
-app.include_router(gemini_router, tags=["Gemini Analysis"])
+app.include_router(gemini_router, prefix="/api/gemini", tags=["Gemini Analysis"])
 import os
 if not os.path.exists("uploads"):
     os.makedirs("uploads")

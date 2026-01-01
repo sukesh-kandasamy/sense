@@ -1,17 +1,12 @@
 {
-  "common_emotions": [
-    "sadness",
-    "anxiety",
-    "panic",
-    "joy",
-    "surprise",
-    "neutral"
-  ],
-  "top_5_emotions": [
-    "neutral",
-    "sadness",
-    "joy",
-    "anxiety",
-    "panic"
-  ]
+"dominant_emotion" : "sadness",
+"emotion_meter" : {
+   "anticipation": 20,
+   "anxiety": 10,
+   "self-doubt": 5,
+   "determination": 15,
+   "relief": 2
+
+
+}
 }

@@ -24,7 +24,8 @@ import {
     Volume2,
     VolumeX,
     Maximize,
-    Minimize
+    Minimize,
+    Info
 } from 'lucide-react';
 
 // Helper to format time (e.g., 65 -> "01:05")
@@ -212,6 +213,7 @@ export function ReportPage() {
         improvements: []
     });
     const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
+    const [expandedEventIndex, setExpandedEventIndex] = useState<number | null>(null);
 
     useEffect(() => {
         const fetchReport = async () => {
@@ -245,25 +247,16 @@ export function ReportPage() {
                     });
 
                     // Transform Insights from emotion_data (Sentiment Detection)
+                    // Transform Insights from emotion_data (Sentiment Detection)
                     const events = data.insights.map((insight: any) => {
                         const emotionData = insight.emotion_data || {};
-                        const stressLevel = emotionData.stress_level || 'low';
-                        const isHighStress = stressLevel === 'high';
-                        const isPositive = emotionData.engagement_score >= 7 || emotionData.dominant_emotion === 'confident' || emotionData.dominant_emotion === 'enthusiastic';
 
                         return {
                             time: new Date(insight.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                            type: isHighStress ? 'CONCERN' : (isPositive ? 'POSITIVE' : 'NEUTRAL'),
-                            title: insight.smart_nudge || emotionData.dominant_emotion?.toUpperCase() || 'Analysis',
-                            desc: emotionData.insight || emotionData.candidate_insight || "Sentiment analysis captured",
-                            confidence: emotionData.confidence_level || emotionData.confidence || 0,
-                            engagement: emotionData.engagement_score || 0,
-                            stressLevel: stressLevel,
-                            facialExpression: emotionData.facial_expression || 'neutral',
-                            bodyLanguage: emotionData.body_language || 'neutral',
-                            vocalTone: emotionData.vocal_tone || 'steady',
-                            interviewerTip: emotionData.interviewer_tip || '',
-                            dominantEmotion: emotionData.dominant_emotion || emotionData.primary || 'neutral'
+                            type: 'ANALYSIS', // Simplified type
+                            dominantEmotion: emotionData.dominant_emotion || emotionData.primary || 'neutral',
+                            confidence: emotionData.confident_meter ?? emotionData.confidence ?? 0,
+                            emotionMeter: emotionData.emotion_meter || emotionData.emotions || {},
                         };
                     });
                     setTimelineEvents(events);
@@ -457,58 +450,61 @@ export function ReportPage() {
                                                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
                                                         <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
                                                             <span className="text-xs font-mono text-gray-500 font-medium">{event.time}</span>
-                                                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${event.type === 'POSITIVE' ? 'bg-green-50 text-green-700 border-green-100' :
-                                                                event.type === 'CONCERN' ? 'bg-red-50 text-red-700 border-red-100' :
-                                                                    'bg-gray-100 text-gray-600 border-gray-200'
-                                                                }`}>
-                                                                {event.type}
-                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-100">
+                                                                    {event.dominantEmotion}
+                                                                </span>
+                                                                <button
+                                                                    onClick={() => setExpandedEventIndex(expandedEventIndex === index ? null : index)}
+                                                                    className="text-gray-400 hover:text-blue-600 transition-colors"
+                                                                >
+                                                                    <Info className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                         <div className="p-5">
-                                                            <div className="flex items-start gap-4 mb-3">
-                                                                <div className={`p-2 rounded-lg flex-shrink-0 ${event.type === 'POSITIVE' ? 'bg-green-50 text-green-600' :
-                                                                    event.type === 'CONCERN' ? 'bg-red-50 text-red-600' :
-                                                                        'bg-blue-50 text-blue-600'
-                                                                    }`}>
-                                                                    <Brain className="w-5 h-5" />
-                                                                </div>
+                                                            <div className="flex items-center justify-between mb-2">
                                                                 <div>
-                                                                    <h4 className="text-sm font-bold text-gray-900 leading-tight mb-1">{event.title}</h4>
-                                                                    <p className="text-sm text-gray-600 leading-relaxed">{event.desc}</p>
-                                                                    {event.interviewerTip && (
-                                                                        <p className="text-xs text-blue-600 mt-2 italic">💡 {event.interviewerTip}</p>
-                                                                    )}
+                                                                    <p className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Dominant Emotion</p>
+                                                                    <h4 className="text-2xl font-bold text-gray-900 capitalize leading-tight">{event.dominantEmotion}</h4>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Confidence</p>
+                                                                    <p className="text-xl font-bold text-gray-900">{event.confidence}%</p>
                                                                 </div>
                                                             </div>
 
-                                                            {/* Sentiment Metrics */}
-                                                            <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-gray-100">
-                                                                <div className="text-center p-2 bg-gray-50 rounded-lg">
-                                                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Confidence</p>
-                                                                    <p className="text-sm font-semibold text-gray-900">{event.confidence}%</p>
-                                                                </div>
-                                                                <div className="text-center p-2 bg-gray-50 rounded-lg">
-                                                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Engagement</p>
-                                                                    <p className="text-sm font-semibold text-gray-900">{event.engagement}/10</p>
-                                                                </div>
-                                                                <div className={`text-center p-2 rounded-lg ${event.stressLevel === 'high' ? 'bg-red-50' :
-                                                                    event.stressLevel === 'moderate' ? 'bg-yellow-50' :
-                                                                        'bg-green-50'
-                                                                    }`}>
-                                                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Stress</p>
-                                                                    <p className={`text-sm font-semibold capitalize ${event.stressLevel === 'high' ? 'text-red-700' :
-                                                                        event.stressLevel === 'moderate' ? 'text-yellow-700' :
-                                                                            'text-green-700'
-                                                                        }`}>{event.stressLevel}</p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Body Language Tags */}
-                                                            <div className="flex flex-wrap gap-1.5 mt-3">
-                                                                <span className="text-[10px] px-2 py-1 bg-purple-50 text-purple-700 rounded-full">😊 {event.facialExpression}</span>
-                                                                <span className="text-[10px] px-2 py-1 bg-indigo-50 text-indigo-700 rounded-full">🧍 {event.bodyLanguage}</span>
-                                                                <span className="text-[10px] px-2 py-1 bg-cyan-50 text-cyan-700 rounded-full">🎤 {event.vocalTone}</span>
-                                                            </div>
+                                                            {/* Expandable Emotion Meter */}
+                                                            {expandedEventIndex === index && (
+                                                                <motion.div
+                                                                    initial={{ height: 0, opacity: 0 }}
+                                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                                    exit={{ height: 0, opacity: 0 }}
+                                                                    className="mt-4 pt-4 border-t border-gray-100"
+                                                                >
+                                                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Detailed Breakdown</p>
+                                                                    <div className="space-y-3">
+                                                                        {Object.entries(event.emotionMeter)
+                                                                            .sort(([, a]: any, [, b]: any) => b - a)
+                                                                            .map(([emotion, value]: any) => (
+                                                                                <div key={emotion}>
+                                                                                    <div className="flex justify-between text-xs mb-1">
+                                                                                        <span className="font-medium text-gray-700 capitalize">{emotion}</span>
+                                                                                        <span className="text-gray-500 tabular-nums">{value}%</span>
+                                                                                    </div>
+                                                                                    <div className="h-1.5 w-full bg-gray-50 rounded-full overflow-hidden">
+                                                                                        <motion.div
+                                                                                            className="h-full rounded-full bg-blue-500"
+                                                                                            initial={{ width: 0 }}
+                                                                                            animate={{ width: `${value}%` }}
+                                                                                            transition={{ duration: 0.5 }}
+                                                                                        />
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                    </div>
+                                                                </motion.div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </motion.div>

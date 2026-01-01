@@ -1,4 +1,5 @@
-import { Activity, Brain, AlertCircle, Lightbulb, Clock, AlertTriangle, Zap, Shield, HelpCircle } from 'lucide-react';
+
+import { Activity, Brain, Clock, AlertTriangle, Lightbulb } from 'lucide-react';
 import { EmotionData } from '../../types';
 import { motion } from 'motion/react';
 
@@ -7,40 +8,59 @@ interface EmotionDetectorProps {
   connected?: boolean;
 }
 
+const EMOTION_EMOJIS: Record<string, string> = {
+  happy: '😊',
+  sad: '😔',
+  angry: '😠',
+  fear: '😱',
+  surprise: '😲',
+  disgust: '🤢',
+  neutral: '😐',
+  confident: '🤠',
+  nervous: '😰',
+  enthusiastic: '🤩',
+  calm: '😌',
+  stressed: '😫',
+  hesitant: '🤔',
+  focused: '🧐'
+};
+
 export function EmotionDetector({ emotionData, connected = true }: EmotionDetectorProps) {
-  // --- 1. Determine System State ---
-  // Standby: Connected but confidence is 0 (silence/no speech yet)
-  // Live: Connected and confidence > 0
-  // No Signal: Not connected
+  // System State Determination
   let systemState: 'standby' | 'live' | 'no-signal' = 'standby';
   if (!connected) systemState = 'no-signal';
-  else if (!emotionData || emotionData.confidence === 0) systemState = 'standby';
+  else if (!emotionData || (!emotionData.dominant_emotion && !emotionData.primary) || emotionData.confident_meter === 0) systemState = 'standby';
   else systemState = 'live';
 
-  const getEmotionColor = (emotion: string) => {
-    switch (emotion) {
+  // Fallback for backward compatibility
+  const dominant = emotionData.dominant_emotion || emotionData.primary || 'neutral';
+  const confidence = emotionData.confident_meter ?? emotionData.confidence ?? 0;
+  // If emotion_meter is empty, try to use old emotions object, or empty
+  const emotionMeter = (emotionData.emotion_meter && Object.keys(emotionData.emotion_meter).length > 0)
+    ? emotionData.emotion_meter
+    : (emotionData.emotions || {});
+
+  const getEmoji = (emotion: string) => EMOTION_EMOJIS[emotion.toLowerCase()] || '😐';
+
+  const getProgressBarColor = (emotion: string) => {
+    switch (emotion.toLowerCase()) {
       case 'nervous':
-      case 'stressed': return 'text-orange-600 bg-orange-50';
+      case 'anxiety':
+      case 'fear':
+      case 'stress': return 'bg-orange-500';
       case 'confident':
-      case 'engaged': return 'text-green-600 bg-green-50';
-      case 'calm': return 'text-blue-600 bg-blue-50';
-      default: return 'text-gray-600 bg-gray-50';
+      case 'determination':
+      case 'excitement':
+      case 'happy': return 'bg-green-500';
+      case 'neutral':
+      case 'calm':
+      case 'relief': return 'bg-blue-500';
+      case 'sad':
+      case 'self-doubt': return 'bg-purple-500';
+      default: return 'bg-slate-500';
     }
   };
 
-  const getProgressBarColor = (emotion: string) => {
-    switch (emotion) {
-      case 'nervous':
-      case 'stressed': return 'bg-orange-500';
-      case 'confident':
-      case 'engaged': return 'bg-green-500';
-      case 'calm':
-      case 'neutral': return 'bg-blue-500';
-      default: return 'bg-slate-500';
-    }
-  }
-
-  // Ensure emotionData matches what we expect
   if (!emotionData) return null;
 
   return (
@@ -61,7 +81,7 @@ export function EmotionDetector({ emotionData, connected = true }: EmotionDetect
             </div>
             <div className="flex flex-col">
               <span>Live Analysis Active</span>
-              <span className="text-xs font-normal opacity-80">Analyzing audio & facial cues...</span>
+              <span className="text-xs font-normal opacity-80">Detecting emotional shifts...</span>
             </div>
           </>
         )}
@@ -69,8 +89,8 @@ export function EmotionDetector({ emotionData, connected = true }: EmotionDetect
           <>
             <Clock className="w-5 h-5 text-yellow-600" />
             <div className="flex flex-col">
-              <span>Waiting for interview to start</span>
-              <span className="text-xs font-normal opacity-80">Real-time insights appear when candidate speaks</span>
+              <span>Waiting for speech</span>
+              <span className="text-xs font-normal opacity-80">Insights appear when candidate speaks</span>
             </div>
           </>
         )}
@@ -78,106 +98,74 @@ export function EmotionDetector({ emotionData, connected = true }: EmotionDetect
           <>
             <AlertTriangle className="w-5 h-5 text-red-600" />
             <div className="flex flex-col">
-              <span>No Signal / Paused</span>
-              <span className="text-xs font-normal opacity-80">Check server connection</span>
+              <span>No Signal</span>
+              <span className="text-xs font-normal opacity-80">Analysis paused</span>
             </div>
           </>
         )}
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 py-4 gap-6 overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-h-0 py-4 gap-6 overflow-hidden relative px-4">
 
-        {/* --- SECTION: Interviewer Insight (Guidance) --- */}
-        <div className="flex-shrink-0 px-1">
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 relative overflow-hidden">
-            {/* Decorative Background Icon */}
-            <Lightbulb className="absolute -right-2 -bottom-2 w-16 h-16 text-blue-100 rotate-12" />
-
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-2">
-                <Lightbulb className="w-4 h-4 text-blue-600 fill-blue-600" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-700">Interviewer Insight</h4>
-              </div>
-
-              <p className="text-sm text-gray-800 leading-relaxed font-medium">
-                {systemState === 'standby'
-                  ? "The interview has not started yet. Once the candidate begins speaking, real-time guidance will appear here."
-                  : (emotionData.smart_nudge || "Listening for candidate responses...")
-                }
-              </p>
+        {/* --- 1. DOMINANT EMOTION (Hero) --- */}
+        <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Dominant Emotion</p>
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-3xl font-bold capitalize text-gray-900 leading-none">
+                {dominant}
+              </h2>
             </div>
+          </div>
+          <div className="text-5xl filter drop-shadow-sm transition-transform hover:scale-110 cursor-default">
+            {getEmoji(dominant)}
           </div>
         </div>
 
-        {/* --- SECTION: Metrics (Greyed out if Standby) --- */}
-        <div className={`flex flex-col gap-6 transition-all duration-500 ${systemState === 'standby' ? 'opacity-40 grayscale blur-[1px]' : 'opacity-100'}`}>
-
-          {/* Dominant State */}
-          <div className="flex-shrink-0 pt-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Dominant State</p>
-                <div className="flex items-baseline gap-3">
-                  <h2 className={`text-4xl font-bold capitalize tracking-tight ${getEmotionColor(emotionData.primary).split(' ')[0]}`}>
-                    {emotionData.primary}
-                  </h2>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-gray-700">
-                      {systemState === 'standby' ? '--' : `${emotionData.confidence.toFixed(0)}%`}
-                    </span>
-                    <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Confidence</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${getEmotionColor(emotionData.primary).replace('text-', 'bg-').replace('bg-', 'bg-opacity-10 text-')}`}>
-                <Brain className="w-6 h-6 opacity-80" />
-              </div>
-            </div>
+        {/* --- 2. CONFIDENT METER --- */}
+        <div>
+          <div className="flex justify-between items-end mb-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Confident Meter</p>
+            <span className="text-sm font-bold text-gray-900">{systemState === 'standby' ? '--' : confidence}%</span>
           </div>
-
-          {/* Detailed Metrics */}
-          <div className="flex-1 overflow-y-auto px-1 scrollbar-hide">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Live Metrics</p>
-            <div className="space-y-4">
-              {emotionData.emotions && Object.entries(emotionData.emotions)
-                .sort(([, a], [, b]) => b - a)
-                .map(([emotion, value]) => (
-                  <div key={emotion} className="group">
-                    <div className="flex justify-between text-xs mb-1.5">
-                      <span className="font-medium text-gray-700 capitalize">{emotion}</span>
-                      <span className="text-gray-500 tabular-nums">
-                        {systemState === 'standby' ? '--' : `${(value * 100).toFixed(0)}%`}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${getProgressBarColor(emotion)}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: systemState === 'standby' ? '0%' : `${value * 100}%` }}
-                        transition={{ duration: 0.5 }}
-                      />
-                    </div>
-                  </div>
-                ))}
-            </div>
-
-            {/* Topic Tags - Optional add-on */}
-            {emotionData.topic_tags && emotionData.topic_tags.length > 0 && systemState === 'live' && (
-              <div className="mt-6 pt-4 border-t border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Detected Topics</p>
-                <div className="flex flex-wrap gap-2">
-                  {emotionData.topic_tags.map((tag, i) => (
-                    <span key={i} className="px-2 py-1 bg-gray-100/80 text-gray-600 text-[10px] font-medium rounded-md border border-gray-200">
-                      {tag.topic} <span className="text-gray-400 ml-1">• {tag.confidence}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="h-4 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-100">
+            <motion.div
+              className="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${confidence}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+            />
           </div>
-
+          <p className="text-[10px] text-gray-400 mt-1 text-right">Voice & Expression Confidence</p>
         </div>
+
+        {/* --- 3. EMOTION METER (Breakdown) --- */}
+        <div className="flex-1 overflow-y-auto pr-1 scrollbar-hide">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 sticky top-0 bg-white z-10 py-1">Emotion Meter</p>
+          <div className="space-y-3">
+            {Object.entries(emotionMeter)
+              .sort(([, a], [, b]) => b - a) // Sort by value desc
+              .map(([emotion, value]) => (
+                <div key={emotion}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium text-gray-700 capitalize">{emotion}</span>
+                    <span className="text-gray-500 tabular-nums">{value}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-50 rounded-full overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${getProgressBarColor(emotion)}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${value}%` }}
+                      transition={{ duration: 0.5 }}
+                    />
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+
+
+
       </div>
     </div>
   );

@@ -68,11 +68,11 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
 
   // State - Moved to top level
   const [emotionData, setEmotionData] = useState<EmotionData>({
+    dominant_emotion: 'neutral',
+    confident_meter: 0,
+    emotion_meter: {},
     primary: 'neutral',
     confidence: 0,
-    emotions: { nervous: 0, confident: 0, stressed: 0, calm: 0, engaged: 0 },
-    heartRate: 72,
-    blinkRate: 15,
   });
   const [emotionConnected, setEmotionConnected] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState<number | null>(null);

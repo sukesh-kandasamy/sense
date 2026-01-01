@@ -36,41 +36,26 @@ Objective: Analyze candidate emotions during video interviews to provide intervi
 1. **Emotional State Detection:** Identify the candidate's current emotional state from facial expressions and body language.
 2. **Confidence Assessment:** Evaluate vocal confidence, clarity, and speech patterns.
 3. **Engagement Level:** Measure how engaged and responsive the candidate is during the conversation.
-4. **Stress Indicators:** Detect signs of nervousness, anxiety, or discomfort that may affect performance.
-5. **Communication Quality:** Assess clarity, articulation, and conversational flow.
 
 **JSON Output Schema:**
 {
-  "dominant_emotion": "confident | nervous | calm | enthusiastic | hesitant | focused | stressed",
-  "confidence_level": 0-100,
-  "engagement_score": 0-10,
-  "stress_level": "low | moderate | high",
-  "communication_clarity": "clear | moderate | unclear",
-  "facial_expression": "smiling | neutral | tense | thoughtful | concerned",
-  "body_language": "open | closed | fidgeting | relaxed | leaning_in",
-  "vocal_tone": "steady | shaky | enthusiastic | monotone | warm",
-  "smart_nudge": {
-    "action": "Short coaching tip for interviewer (max 10 words)",
-    "priority": "low | medium | high"
-  },
-  "candidate_insight": "One sentence describing the candidate's current emotional state and what might be causing it.",
-  "interviewer_tip": "Actionable suggestion for the interviewer to improve the conversation flow."
+  "dominant_emotion": "happy | sad | angry | fear | surprise | disgust | neutral | confident | nervous",
+  "confident_meter": 0-100,
+  "emotion_meter": {
+    "anticipation": 0-100,
+    "anxiety": 0-100,
+    "self-doubt": 0-100,
+    "determination": 0-100,
+    "relief": 0-100,
+    "excitement": 0-100,
+    "neutral": 0-100
+  }
 }
 
-**Guidance for Interviewers:**
-- Provide real-time coaching tips to help interviewers adapt their approach.
-- Suggest when to slow down, offer encouragement, or change topics.
-- Highlight positive moments (enthusiasm, confidence spikes) to build rapport.
-
-**Candidate Experience Insights:**
-- Track emotional journey throughout the interview.
-- Identify moments of peak stress or confidence.
-- Provide data to help improve future interview experiences.
-
 **Instructions:**
-- Focus on detecting emotional SHIFTS rather than just static states.
-- Prioritize actionable insights that help interviewers in real-time.
-- Be empathetic - the goal is to help both parties have a better experience.
+- **dominant_emotion**: Choose the single most prominent emotion.
+- **confident_meter**: Overall confidence score (0-100).
+- **emotion_meter**: A breakdown of specific emotional components. Values should roughly sum to 100 or reflect relative intensity.
 - Respond ONLY with valid JSON (no markdown, no explanation).
 """
 
@@ -279,43 +264,25 @@ class EmotionAnalysisManager:
         """Generate mock emotion data for testing without API key."""
         import random
         
-        emotions = ["confident", "nervous", "calm", "enthusiastic", "hesitant", "focused", "stressed"]
+        emotions = ["happy", "sad", "neutral", "confident", "nervous"]
         dominant_emotion = random.choice(emotions)
         
-        nudges = {
-            "nervous": {"action": "Slow down and offer reassurance", "priority": "medium"},
-            "hesitant": {"action": "Rephrase or simplify your question", "priority": "medium"},
-            "confident": {"action": "Challenge with a follow-up question", "priority": "low"},
-            "calm": {"action": "Good pace, continue as is", "priority": "low"},
-            "enthusiastic": {"action": "Build on their energy", "priority": "low"},
-            "focused": {"action": "Let them complete their thought", "priority": "low"},
-            "stressed": {"action": "Take a brief pause or change topic", "priority": "high"}
+        confidence = random.randint(40, 95)
+        
+        # Generate random values for emotion meter
+        emotion_meter = {
+            "anticipation": random.randint(0, 30),
+            "anxiety": random.randint(0, 30),
+            "self-doubt": random.randint(0, 20),
+            "determination": random.randint(0, 40),
+            "relief": random.randint(0, 20),
+            "excitement": random.randint(0, 40)
         }
         
-        stress_levels = ["low", "moderate", "high"]
-        facial_expressions = ["smiling", "neutral", "tense", "thoughtful", "concerned"]
-        body_languages = ["open", "closed", "fidgeting", "relaxed", "leaning_in"]
-        vocal_tones = ["steady", "shaky", "enthusiastic", "monotone", "warm"]
-        
-        confidence = random.randint(40, 95)
-        engagement = random.randint(4, 10)
-        
         return {
-            "primary": dominant_emotion,
             "dominant_emotion": dominant_emotion,
-            "confidence_level": confidence,
-            "confidence": confidence,
-            "engagement_score": engagement,
-            "stress_level": random.choice(stress_levels),
-            "communication_clarity": random.choice(["clear", "moderate", "unclear"]),
-            "facial_expression": random.choice(facial_expressions),
-            "body_language": random.choice(body_languages),
-            "vocal_tone": random.choice(vocal_tones),
-            "smart_nudge": nudges.get(dominant_emotion, {"action": "", "priority": "low"}).get("action", ""),
-            "smart_nudge_priority": nudges.get(dominant_emotion, {"action": "", "priority": "low"}).get("priority", "low"),
-            "candidate_insight": "Mock data - Set GOOGLE_API_KEY for real sentiment analysis",
-            "insight": "Mock data - Set GOOGLE_API_KEY for real sentiment analysis",
-            "interviewer_tip": "Consider the candidate's comfort level and adjust accordingly",
+            "confident_meter": confidence,
+            "emotion_meter": emotion_meter
         }
 
 

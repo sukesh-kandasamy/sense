@@ -1,21 +1,15 @@
 export interface EmotionData {
-  primary: 'nervous' | 'confident' | 'stressed' | 'calm' | 'engaged' | 'neutral';
-  confidence: number;
-  emotions: {
-    nervous: number;
-    confident: number;
-    stressed: number;
-    calm: number;
-    engaged: number;
+  dominant_emotion: string;
+  confident_meter: number;
+  emotion_meter: {
+    [key: string]: number;
   };
-  smart_nudge?: string;
-  topic_tags?: Array<{
-    topic: string;
-    confidence: 'High' | 'Medium' | 'Low';
-  }>;
-  reasoning?: string;
-  heartRate: number;
-  blinkRate: number;
+  // Backward compatibility (optional)
+  primary?: string;
+  confidence?: number;
+  emotions?: Record<string, number>;
+  heartRate?: number;
+  blinkRate?: number;
 }
 
 export interface User {

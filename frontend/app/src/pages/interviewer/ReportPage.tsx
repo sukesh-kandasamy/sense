@@ -41,7 +41,7 @@ const formatTime = (seconds: number) => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-const CustomVideoPlayer = ({ src }: { src: string }) => {
+const CustomVideoPlayer = ({ src, totalDuration }: { src: string, totalDuration?: number }) => {
     const videoRef = React.useRef<HTMLVideoElement>(null);
     const [playing, setPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
@@ -185,7 +185,7 @@ const CustomVideoPlayer = ({ src }: { src: string }) => {
                         <div className="text-sm font-medium font-mono">
                             <span>{formatTime(currentTime)}</span>
                             <span className="text-gray-400 mx-1">/</span>
-                            <span>{formatTime(duration)}</span>
+                            <span>{formatTime(totalDuration || duration)}</span>
                         </div>
                     </div>
                 </div>
@@ -205,6 +205,7 @@ export function ReportPage() {
         role: "Candidate",
         date: "",
         duration: "",
+        videoDurationSeconds: 0,
         overallScore: 0,
         videoUrl: "",
         sentiment: "Neutral",
@@ -234,6 +235,7 @@ export function ReportPage() {
                         duration: data.meeting.video_duration_seconds
                             ? formatTime(data.meeting.video_duration_seconds)
                             : (data.meeting.duration ? `${data.meeting.duration} mins` : "Unknown"),
+                        videoDurationSeconds: data.meeting.video_duration_seconds || 0,
                         candidateDuration: data.meeting.candidate_duration_seconds
                             ? formatTime(data.meeting.candidate_duration_seconds)
                             : "N/A",
@@ -321,7 +323,7 @@ export function ReportPage() {
                     {/* Left Panel: Video Player (Takes up 2 cols) */}
                     <div className="xl:col-span-2 flex flex-col gap-6">
                         <div className="bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 flex-1 relative group">
-                            <CustomVideoPlayer src={reportData.videoUrl} />
+                            <CustomVideoPlayer src={reportData.videoUrl} totalDuration={reportData.videoDurationSeconds} />
                         </div>
                     </div>
 

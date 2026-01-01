@@ -138,6 +138,22 @@ def init_db():
     except sqlite3.OperationalError:
         pass # Column likely exists
 
+    try:
+        conn.execute("ALTER TABLE resume_data ADD COLUMN experience TEXT")
+    except sqlite3.OperationalError:
+        pass # Column likely exists
+
+    # Duration Tracking Migrations
+    try:
+        conn.execute("ALTER TABLE candidates ADD COLUMN left_at TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass 
+
+    try:
+        conn.execute("ALTER TABLE meetings ADD COLUMN video_duration_seconds INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
 

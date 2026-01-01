@@ -63,6 +63,7 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // State - Moved to top level
@@ -652,6 +653,7 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
       };
 
       recorder.start(1000); // 1s chunks
+      recordingStartTimeRef.current = Date.now();
       console.log("[Rec] Candidate recording started from second 1");
     } catch (e) {
       console.error("[Rec] Recording failed", e);
@@ -708,10 +710,15 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
       // For candidates: upload recording before leaving
       if (userRole === 'candidate' && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         console.log("[Rec] Interviewer ended call - stopping and uploading recording...");
+
+        const endTime = Date.now();
+        const durationSeconds = recordingStartTimeRef.current ? (endTime - recordingStartTimeRef.current) / 1000 : 0;
+
         mediaRecorderRef.current.onstop = async () => {
           const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
           const formData = new FormData();
           formData.append('file', blob, 'recording.webm');
+          formData.append('duration', durationSeconds.toString());
           try {
             const API_URL = `${BACKEND_URL}/auth`;
             await axios.post(`${API_URL}/meetings/${roomId}/recording`, formData, { withCredentials: true });
@@ -797,15 +804,21 @@ export function InterviewRoom({ userRole, userName, roomId }: InterviewRoomProps
     // Candidate: Stop & Upload Recording before leaving
     if (userRole === 'candidate' && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       console.log("[Rec] Candidate stopping and uploading recording...");
+
+      const endTime = Date.now();
+      const durationSeconds = recordingStartTimeRef.current ? (endTime - recordingStartTimeRef.current) / 1000 : 0;
+      console.log(`[Rec] Recording duration: ${durationSeconds}s`);
+
       mediaRecorderRef.current.onstop = async () => {
         const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
         const formData = new FormData();
         formData.append('file', blob, 'recording.webm');
+        formData.append('duration', durationSeconds.toString());
 
         try {
           const API_URL = `${BACKEND_URL}/auth`;
           await axios.post(`${API_URL}/meetings/${roomId}/recording`, formData, { withCredentials: true });
-          console.log("[Rec] Candidate upload success");
+          console.log("[Rec] Candidate upload success with duration");
         } catch (e) {
           console.error("[Rec] Candidate upload failed", e);
         }

@@ -3,6 +3,7 @@ from typing import Dict, List
 from core.dependencies import get_current_user_ws
 from core.database import get_db_connection
 from models import User
+from datetime import datetime
 
 router = APIRouter()
 
@@ -97,6 +98,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user: User = De
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Not authorized for this meeting")
         return
 
+    conn = get_db_connection()
+    conn.execute("INSERT OR IGNORE INTO candidates (meeting_id, name, joined_at) VALUES (?, ?, ?)", 
+                 (room_id, user.full_name or user.username, datetime.utcnow()))
+    conn.commit()
+    conn.close()
+
     # Try to connect - will be rejected if room is full
     connected = await manager.connect(websocket, room_id)
     if not connected:
@@ -111,6 +118,24 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user: User = De
             
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
+        
+        # Track leave time if candidate
+        if user.role == "candidate":
+            conn = get_db_connection()
+            # Update the latest entry for this candidate in this meeting
+            conn.execute("""
+                UPDATE candidates 
+                SET left_at = ? 
+                WHERE id = (
+                    SELECT id FROM candidates 
+                    WHERE meeting_id = ? AND name = ? 
+                    ORDER BY id DESC LIMIT 1
+                )
+            """, (datetime.utcnow(), room_id, user.full_name or user.username))
+            conn.commit()
+            conn.close()
+            print(f"[SIGNALING] Tracked candidate disconnect for {user.username}")
+
         # Notify others that peer left
         await manager.broadcast_to_others({"type": "peer_left"}, websocket, room_id)
 

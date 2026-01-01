@@ -1,0 +1,17 @@
+{
+  "common_emotions": [
+    "sadness",
+    "anxiety",
+    "panic",
+    "joy",
+    "surprise",
+    "neutral"
+  ],
+  "top_5_emotions": [
+    "neutral",
+    "sadness",
+    "joy",
+    "anxiety",
+    "panic"
+  ]
+}

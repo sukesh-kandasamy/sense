@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Response, Cookie, UploadFile, File, Request
+from fastapi import APIRouter, HTTPException, Depends, status, Response, Cookie, UploadFile, File, Request, Form
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Optional
@@ -513,7 +513,7 @@ async def get_remaining_time(meeting_id: str):
     }
 
 @router.post("/meetings/{meeting_id}/recording")
-async def upload_recording(meeting_id: str, file: UploadFile = File(...)):
+async def upload_recording(meeting_id: str, duration: float = Form(None), file: UploadFile = File(...)):
     """Upload meeting recording from frontend"""
     meeting_id = meeting_id.lower()
     
@@ -532,8 +532,8 @@ async def upload_recording(meeting_id: str, file: UploadFile = File(...)):
     
     conn = get_db_connection()
     conn.execute(
-        "UPDATE meetings SET recording_url = ?, ended_at = ?, active = 0 WHERE id = ?", 
-        (recording_url, datetime.utcnow(), meeting_id)
+        "UPDATE meetings SET recording_url = ?, video_duration_seconds = ?, ended_at = ?, active = 0 WHERE id = ?", 
+        (recording_url, int(duration) if duration else None, datetime.utcnow(), meeting_id)
     )
     conn.commit()
     conn.close()
@@ -642,9 +642,25 @@ async def get_meeting_report(meeting_id: str):
     # Create meeting dict first
     meeting_dict = dict(meeting)
     
-    # Get Candidate Name and Profile Photo
-    candidates = conn.execute("SELECT name FROM candidates WHERE meeting_id = ?", (meeting_id,)).fetchall()
+    # Get Candidate Name, Photo, and Duration
+    candidates = conn.execute("SELECT name, joined_at, left_at FROM candidates WHERE meeting_id = ?", (meeting_id,)).fetchall()
     candidate_names = [c['name'] for c in candidates]
+    
+    # Calculate Candidate Session Duration
+    candidate_duration_seconds = 0
+    if candidates:
+        # Sum of all sessions for this candidate
+        for c in candidates:
+            if c['joined_at'] and c['left_at']:
+                try:
+                    start = datetime.fromisoformat(str(c['joined_at']).replace(' ', 'T'))
+                    end = datetime.fromisoformat(str(c['left_at']).replace(' ', 'T'))
+                    candidate_duration_seconds += (end - start).total_seconds()
+                except ValueError:
+                    pass
+    
+    meeting_dict['candidate_duration_seconds'] = int(candidate_duration_seconds) if candidate_duration_seconds > 0 else None
+    
     candidate_photo = None
     
     # Fallback: Check if a candidate user exists for this meeting (username pattern: candidate_{meeting_id})

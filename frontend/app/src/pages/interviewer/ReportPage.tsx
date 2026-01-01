@@ -18,8 +18,180 @@ import {
     CheckCircle2,
     Eye,
     Target,
-    FileText
+    FileText,
+    Play,
+    Pause,
+    Volume2,
+    VolumeX,
+    Maximize,
+    Minimize
 } from 'lucide-react';
+
+// Helper to format time (e.g., 65 -> "01:05")
+const formatTime = (seconds: number) => {
+    if (!seconds) return "00:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+
+    if (h > 0) {
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+const CustomVideoPlayer = ({ src }: { src: string }) => {
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+    const [playing, setPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [volume, setVolume] = useState(1);
+    const [isMuted, setIsMuted] = useState(false);
+    const [showControls, setShowControls] = useState(true);
+    const controlsTimeoutRef = React.useRef<any>();
+
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        const updateTime = () => setCurrentTime(video.currentTime);
+        const updateDuration = () => setDuration(video.duration);
+        const onEnded = () => setPlaying(false);
+
+        video.addEventListener('timeupdate', updateTime);
+        video.addEventListener('loadedmetadata', updateDuration);
+        video.addEventListener('ended', onEnded);
+
+        return () => {
+            video.removeEventListener('timeupdate', updateTime);
+            video.removeEventListener('loadedmetadata', updateDuration);
+            video.removeEventListener('ended', onEnded);
+        };
+    }, []);
+
+    const togglePlay = () => {
+        if (!videoRef.current) return;
+        if (playing) {
+            videoRef.current.pause();
+        } else {
+            videoRef.current.play();
+        }
+        setPlaying(!playing);
+    };
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!videoRef.current) return;
+        const time = parseFloat(e.target.value);
+        videoRef.current.currentTime = time;
+        setCurrentTime(time);
+    };
+
+    const toggleMute = () => {
+        if (!videoRef.current) return;
+        videoRef.current.muted = !isMuted;
+        setIsMuted(!isMuted);
+    };
+
+    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!videoRef.current) return;
+        const val = parseFloat(e.target.value);
+        videoRef.current.volume = val;
+        setVolume(val);
+        setIsMuted(val === 0);
+    };
+
+    const handleMouseMove = () => {
+        setShowControls(true);
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        if (playing) {
+            controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 2500);
+        }
+    };
+
+    useEffect(() => {
+        if (!playing) setShowControls(true);
+    }, [playing]);
+
+    if (!src) return (
+        <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-900">
+            <p>No recording available</p>
+        </div>
+    );
+
+    return (
+        <div
+            className="absolute inset-0 bg-black group"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => playing && setShowControls(false)}
+        >
+            <video
+                ref={videoRef}
+                src={src}
+                className="w-full h-full object-contain cursor-pointer"
+                onClick={togglePlay}
+            />
+
+            {/* Center Play Button Overlay */}
+            {!playing && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20">
+                    <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center animate-pulse">
+                        <Play className="w-8 h-8 text-white fill-white ml-1" />
+                    </div>
+                </div>
+            )}
+
+            {/* Bottom Controls Bar */}
+            <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-4 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+                {/* Progress Bar */}
+                <div className="group/slider relative h-1.5 w-full bg-gray-600 rounded-full cursor-pointer mb-4">
+                    <div
+                        className="absolute h-full bg-blue-500 rounded-full"
+                        style={{ width: `${(currentTime / duration) * 100}%` }}
+                    />
+                    <input
+                        type="range"
+                        min="0"
+                        max={duration || 0}
+                        value={currentTime}
+                        onChange={handleSeek}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                </div>
+
+                <div className="flex items-center justify-between text-white">
+                    <div className="flex items-center gap-4">
+                        <button onClick={togglePlay} className="hover:text-blue-400 transition-colors">
+                            {playing ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current" />}
+                        </button>
+
+                        <div className="flex items-center gap-2 group/volume relative">
+                            <button onClick={toggleMute} className="hover:text-blue-400 transition-colors">
+                                {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                            </button>
+                            <div className="w-0 overflow-hidden group-hover/volume:w-24 transition-all duration-300">
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={isMuted ? 0 : volume}
+                                    onChange={handleVolumeChange}
+                                    className="w-20 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="text-sm font-medium font-mono">
+                            <span>{formatTime(currentTime)}</span>
+                            <span className="text-gray-400 mx-1">/</span>
+                            <span>{formatTime(duration)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export function ReportPage() {
     const { meetingId } = useParams<{ meetingId: string }>();
@@ -56,7 +228,13 @@ export function ReportPage() {
                         candidatePhoto: data.meeting.candidate_photo ? `${BACKEND_URL}${data.meeting.candidate_photo}` : null,
                         role: "Applicant",
                         date: new Date(data.meeting.created_at).toLocaleDateString(),
-                        duration: data.meeting.duration ? `${data.meeting.duration} mins` : "Unknown",
+                        // Prefer video duration (seconds) -> formatted, else fallback to planned duration (mins)
+                        duration: data.meeting.video_duration_seconds
+                            ? formatTime(data.meeting.video_duration_seconds)
+                            : (data.meeting.duration ? `${data.meeting.duration} mins` : "Unknown"),
+                        candidateDuration: data.meeting.candidate_duration_seconds
+                            ? formatTime(data.meeting.candidate_duration_seconds)
+                            : "N/A",
                         overallScore: 85, // Mock score
                         videoUrl: data.meeting.recording_url ? `${BACKEND_URL}/auth/meetings/${meetingId}/stream` : "",
                         resumeUrl: data.meeting.resume_url ? `${BACKEND_URL}${data.meeting.resume_url}` : null,
@@ -127,7 +305,7 @@ export function ReportPage() {
                     <div>
                         <h1 className="text-xl font-normal text-gray-900">Interview Report</h1>
                         <p className="text-sm text-gray-500 flex items-center gap-2">
-                            {reportData.date} • {reportData.duration} • ID: {meetingId}
+                            {reportData.date} • <Clock className="w-3.5 h-3.5" /> {reportData.duration} • ID: {meetingId}
                         </p>
                     </div>
                 </div>
@@ -150,18 +328,7 @@ export function ReportPage() {
                     {/* Left Panel: Video Player (Takes up 2 cols) */}
                     <div className="xl:col-span-2 flex flex-col gap-6">
                         <div className="bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 flex-1 relative group">
-                            {reportData.videoUrl ? (
-                                <video
-                                    src={reportData.videoUrl}
-                                    controls
-                                    className="w-full h-full object-contain"
-                                    style={{ position: 'absolute', top: 0, left: 0 }}
-                                />
-                            ) : (
-                                <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                                    <p>No recording available</p>
-                                </div>
-                            )}
+                            <CustomVideoPlayer src={reportData.videoUrl} />
                         </div>
                     </div>
 
@@ -202,17 +369,23 @@ export function ReportPage() {
                                                 </a>
                                             )}
                                         </div>
-                                        {reportData.candidatePhoto ? (
-                                            <img
-                                                src={reportData.candidatePhoto}
-                                                alt={reportData.candidateName}
-                                                className="h-12 w-12 rounded-full object-cover border-2 border-blue-100"
-                                            />
-                                        ) : (
-                                            <div className="h-12 w-12 bg-blue-50 text-blue-700 rounded-full flex items-center justify-center font-bold text-xl">
-                                                {reportData.candidateName?.charAt(0).toUpperCase() || 'C'}
+                                        <div className="flex flex-col items-end gap-2">
+                                            {reportData.candidatePhoto ? (
+                                                <img
+                                                    src={reportData.candidatePhoto}
+                                                    alt={reportData.candidateName}
+                                                    className="h-12 w-12 rounded-full object-cover border-2 border-blue-100"
+                                                />
+                                            ) : (
+                                                <div className="h-12 w-12 bg-blue-50 text-blue-700 rounded-full flex items-center justify-center font-bold text-xl">
+                                                    {reportData.candidateName?.charAt(0).toUpperCase() || 'C'}
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                                                <Clock className="w-3 h-3" />
+                                                <span>Attended: {reportData.candidateDuration || "N/A"}</span>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
 
                                     {/* Score */}
@@ -356,7 +529,7 @@ export function ReportPage() {
                         </div>
                     </div>
                 </div>
-            </main>
-        </div>
+            </main >
+        </div >
     );
 }

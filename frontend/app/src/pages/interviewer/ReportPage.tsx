@@ -145,18 +145,27 @@ const CustomVideoPlayer = ({ src, totalDuration }: { src: string, totalDuration?
             <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-4 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>
                 {/* Progress Bar */}
                 <div className="group/slider relative h-1.5 w-full bg-gray-600 rounded-full cursor-pointer mb-4">
-                    <div
-                        className="absolute h-full bg-blue-500 rounded-full"
-                        style={{ width: `${(currentTime / duration) * 100}%` }}
-                    />
-                    <input
-                        type="range"
-                        min="0"
-                        max={duration || 0}
-                        value={currentTime}
-                        onChange={handleSeek}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
+                    {(() => {
+                        const effectiveDuration = totalDuration || duration || 0;
+                        const progressPercent = effectiveDuration > 0 ? Math.min((currentTime / effectiveDuration) * 100, 100) : 0;
+
+                        return (
+                            <>
+                                <div
+                                    className="absolute h-full bg-blue-500 rounded-full"
+                                    style={{ width: `${progressPercent}%` }}
+                                />
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={effectiveDuration}
+                                    value={currentTime}
+                                    onChange={handleSeek}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                />
+                            </>
+                        );
+                    })()}
                 </div>
 
                 <div className="flex items-center justify-between text-white">
@@ -182,10 +191,10 @@ const CustomVideoPlayer = ({ src, totalDuration }: { src: string, totalDuration?
                             </div>
                         </div>
 
-                        <div className="text-sm font-medium font-mono">
+                        <div className="text-sm font-medium" style={{ fontFamily: 'Roboto, sans-serif' }}>
                             <span>{formatTime(currentTime)}</span>
                             <span className="text-gray-400 mx-1">/</span>
-                            <span>{formatTime(totalDuration || duration)}</span>
+                            <span>{formatTime(totalDuration || duration || 0)}</span>
                         </div>
                     </div>
                 </div>

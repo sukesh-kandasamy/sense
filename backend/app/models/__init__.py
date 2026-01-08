@@ -60,6 +60,8 @@ class CandidateJoinRequest(BaseModel):
 
 class MeetingSummary(Meeting):
     candidates: list[str] = []
+    candidate_name: Optional[str] = None
+    candidate_profile_photo_url: Optional[str] = None
 
 class ResumeData(BaseModel):
     summary: Optional[str] = None

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { BACKEND_URL } from '../../config';
 import { ImageCropModal } from '../../components/ui/ImageCropModal';
 import {
@@ -27,7 +28,7 @@ export function CandidateSettingsPage() {
     const [isUploadingResume, setIsUploadingResume] = useState(false);
     const resumeInputRef = useRef<HTMLInputElement>(null);
     const photoInputRef = useRef<HTMLInputElement>(null);
-    const [uploadError, setUploadError] = useState<string | null>(null);
+
 
     // Photo crop state
     const [showCropModal, setShowCropModal] = useState(false);
@@ -57,10 +58,10 @@ export function CandidateSettingsPage() {
         setIsSaving(true);
         try {
             await axios.put(`${BACKEND_URL}/auth/users/me`, { full_name: fullName }, { withCredentials: true });
-            alert('Settings saved!');
+            toast.success('Settings saved!');
         } catch (err) {
             console.error('Failed to save:', err);
-            alert('Failed to save settings.');
+            toast.error('Failed to save settings.');
         } finally {
             setIsSaving(false);
         }
@@ -97,7 +98,7 @@ export function CandidateSettingsPage() {
             setProfilePhoto(res.data.profile_photo_url);
         } catch (err) {
             console.error('Photo upload failed:', err);
-            alert('Failed to upload photo.');
+            toast.error('Failed to upload photo.');
         }
     };
 
@@ -117,7 +118,7 @@ export function CandidateSettingsPage() {
             setResumeFilename(res.data.filename);
         } catch (err: any) {
             console.error(err);
-            setUploadError(err.response?.data?.detail || "Failed to upload resume.");
+            toast.error(err.response?.data?.detail || "Failed to upload resume.");
         } finally {
             setIsUploadingResume(false);
             if (resumeInputRef.current) resumeInputRef.current.value = '';
@@ -275,31 +276,7 @@ export function CandidateSettingsPage() {
             </div>
 
             {/* Upload Error Modal */}
-            {uploadError && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
-                        <div className="bg-red-50 px-6 py-4 border-b border-red-100">
-                            <h3 className="text-lg font-semibold text-red-800 flex items-center gap-2">
-                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                </svg>
-                                Upload Failed
-                            </h3>
-                        </div>
-                        <div className="px-6 py-5">
-                            <p className="text-gray-700">{uploadError}</p>
-                        </div>
-                        <div className="px-6 py-4 bg-gray-50 flex justify-end">
-                            <button
-                                onClick={() => setUploadError(null)}
-                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors"
-                            >
-                                OK
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+
             {/* Image Crop Modal */}
             {showCropModal && selectedPhotoSrc && (
                 <ImageCropModal

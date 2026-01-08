@@ -1,19 +1,34 @@
-from fastapi import HTTPException, status, Cookie, Depends
+from fastapi import HTTPException, status, Cookie, Depends, Header
 from typing import Optional
 from core.database import get_session_user_from_db, get_db_connection
 from models import User, UserInDB
 
-async def get_current_user(access_token: Optional[str] = Cookie(None)):
+async def get_current_user(
+    access_token: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None)
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if not access_token:
+    
+    token = access_token
+    print(f"[DEBUG] Cookie: {access_token}, Header: {authorization}") # Debug print
+    
+    if not token and authorization:
+        scheme, _, param = authorization.partition(" ")
+        if scheme.lower() == "bearer":
+            token = param
+            
+    print(f"[DEBUG] Resolved Token: {token}")
+    if not token:
+        print("[DEBUG] No token found")
         raise credentials_exception
         
-    session = get_session_user_from_db(access_token)
+    session = get_session_user_from_db(token)
     if not session:
+        print("[DEBUG] Session not found in DB")
         raise credentials_exception
         
     username = session['username']

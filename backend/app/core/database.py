@@ -26,6 +26,7 @@ def init_db():
             hashed_password TEXT,
             profile_photo_url TEXT,
             analysis_mode TEXT DEFAULT 'cloud',
+            role TEXT DEFAULT 'candidate',
             disabled INTEGER DEFAULT 0
         )
     ''')
@@ -40,6 +41,22 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN analysis_mode TEXT DEFAULT 'cloud'")
     except sqlite3.OperationalError:
         pass # Column likely exists
+
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN resume_url TEXT")
+    except sqlite3.OperationalError:
+        pass # Column likely exists
+
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN resume_filename TEXT")
+    except sqlite3.OperationalError:
+        pass # Column likely exists
+
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'candidate'")
+    except sqlite3.OperationalError:
+        pass # Column likely exists
+
     # Meetings Table
     conn.execute('''
         CREATE TABLE IF NOT EXISTS meetings (
@@ -106,10 +123,9 @@ def init_db():
             skills_hard TEXT,            -- JSON array
             projects TEXT,               -- JSON array
             achievements TEXT,           -- JSON array
-            certifications TEXT,         -- JSON array
+            certificates TEXT,           -- JSON array (renamed from certifications)
             education TEXT,              -- JSON array
             links TEXT,                  -- JSON (portfolio, linkedin, instagram)
-            others TEXT,                 -- JSON
             raw_json TEXT,               -- Full parsed data as JSON backup
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -139,7 +155,7 @@ def init_db():
         pass # Column likely exists
 
     try:
-        conn.execute("ALTER TABLE resume_data ADD COLUMN experience TEXT")
+        conn.execute("ALTER TABLE resume_data ADD COLUMN certificates TEXT")
     except sqlite3.OperationalError:
         pass # Column likely exists
 
@@ -151,6 +167,35 @@ def init_db():
 
     try:
         conn.execute("ALTER TABLE meetings ADD COLUMN video_duration_seconds INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
+    # Insight Timings Migrations
+    try:
+        conn.execute("ALTER TABLE insights ADD COLUMN request_timestamp TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("ALTER TABLE insights ADD COLUMN relative_seconds INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
+    # Meeting Summaries Table - NEW
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS meeting_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            meeting_id TEXT,
+            summary TEXT,
+            overall_score INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(meeting_id) REFERENCES meetings(id)
+        )
+    ''')
+
+    # Migration for is_analyzed in Meetings
+    try:
+        conn.execute("ALTER TABLE meetings ADD COLUMN is_analyzed INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass
 

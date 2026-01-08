@@ -1,7 +1,11 @@
+
 from fastapi import APIRouter, HTTPException, Depends, status, Response, Cookie, UploadFile, File, Request, Form
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from typing import Optional
+from typing import Optional, List
+from dotenv import load_dotenv
+
+load_dotenv()
 from pydantic import BaseModel as PydanticBaseModel
 import string
 import random
@@ -318,6 +322,16 @@ async def get_meetings(
         if 'duration' not in meeting_dict or meeting_dict['duration'] is None:
              meeting_dict['duration'] = None
 
+        # Fetch candidate profile details using candidate_email
+        if meeting_dict.get('candidate_email'):
+            candidate_user = conn.execute(
+                "SELECT full_name, profile_photo_url FROM users WHERE email = ?", 
+                (meeting_dict['candidate_email'],)
+            ).fetchone()
+            if candidate_user:
+                meeting_dict['candidate_name'] = candidate_user['full_name']
+                meeting_dict['candidate_profile_photo_url'] = candidate_user['profile_photo_url']
+
 
         results.append(MeetingSummary(**meeting_dict))
     
@@ -619,8 +633,136 @@ async def stream_recording(meeting_id: str, request: Request):
             }
         )
 
+@router.post("/meetings/{meeting_id}/analyze")
+async def analyze_meeting(meeting_id: str, current_user: User = Depends(get_current_user)):
+    """
+    Triggers a one-time AI analysis of the meeting.
+    Returns the summary and score.
+    """
+    meeting_id = meeting_id.lower()
+    conn = get_db_connection()
+    
+    # 1. Check meeting existence and permissions
+    meeting = conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()
+    if not meeting:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Meeting not found")
+        
+    if meeting["creator_username"] != current_user.username:
+         conn.close()
+         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # 2. Check if already analyzed. 
+    is_analyzed = False
+    try:
+        is_analyzed = meeting["is_analyzed"]
+    except:
+        pass
+
+    if is_analyzed:
+        try:
+            summary_row = conn.execute("SELECT * FROM meeting_summaries WHERE meeting_id = ?", (meeting_id,)).fetchone()
+            if summary_row:
+                conn.close()
+                return {
+                    "summary": summary_row["summary"],
+                    "overall_score": summary_row["overall_score"]
+                }
+        except:
+             pass
+
+    # 3. Fetch Insights for Context
+    insights_rows = conn.execute("SELECT * FROM insights WHERE meeting_id = ? ORDER BY relative_seconds ASC", (meeting_id,)).fetchall()
+    
+    if not insights_rows:
+        conn.close()
+        return {
+            "summary": "No sufficient data to analyze.",
+            "overall_score": 0
+        }
+
+    # Construct context string
+    timeline_str = "Timeline of detected emotions:\n"
+    total_confidence = 0
+    valid_confidence_count = 0
+    
+    for row in insights_rows:
+        try:
+            sec = row['relative_seconds']
+            if not row['emotion_json']: continue
+            data = json.loads(row['emotion_json'])
+            emotion = data.get('dominant_emotion') or data.get('primary', 'neutral')
+            conf = data.get('confidence') or data.get('confident_meter', 0)
+            
+            timeline_str += f"T+{sec}s: Emotion={emotion}, Confidence={conf}%\n"
+            
+            total_confidence += int(conf)
+            valid_confidence_count += 1
+        except:
+             pass
+
+    # 4. Gemini Call
+    from routes.gemini_analysis import emotion_manager
+    if not emotion_manager.genai_client:
+         conn.close()
+         raise HTTPException(status_code=503, detail="AI Service unavailable")
+
+    prompt = f"""
+    You are an expert HR Interviewer. Analyze the following candidate emotion timeline:
+    
+    {timeline_str[-5000:]} 
+    
+    (Note: showing last ~150 entries max to fit context)
+
+    Task:
+    1. Provide a concise PROFESSIONAL SUMMARY (40-50 words) of the candidate's behavioral performance. Focus on their emotional stability, confidence trends, and overall engagement.
+    2. Provide an OVERALL SCORE (0-100) based on confidence levels and positive/neutral emotion frequency. 
+    
+    Return JSON ONLY:
+    {{
+        "summary": "The candidate demonstrated...",
+        "overall_score": 85
+    }}
+    """
+    
+    try:
+        from google.genai import types
+        response = await asyncio.to_thread(
+             emotion_manager.genai_client.models.generate_content,
+             model="gemini-2.5-flash",
+             contents=[types.Content(parts=[types.Part(text=prompt)])]
+        )
+        
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.strip("`").replace("json\n", "")
+            
+        result = json.loads(response_text)
+        
+        summary_text = result.get("summary", "Analysis unavailable.")
+        score = result.get("overall_score", 0)
+        
+        # 5. Save to DB
+        conn.execute("INSERT INTO meeting_summaries (meeting_id, summary, overall_score) VALUES (?, ?, ?)", 
+                     (meeting_id, summary_text, score))
+        try:
+            conn.execute("UPDATE meetings SET is_analyzed = 1 WHERE id = ?", (meeting_id,))
+        except:
+            pass
+            
+        conn.commit()
+        conn.close()
+        
+        return result
+
+    except Exception as e:
+        print(f"Analysis Error: {e}")
+        conn.close()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/meetings/{meeting_id}/report")
-async def get_meeting_report(meeting_id: str):
+async def get_meeting_report(meeting_id: str, current_user: User = Depends(get_current_user)):
     """Get full meeting report including recording and insights"""
     meeting_id = meeting_id.lower()
     conn = get_db_connection()
@@ -642,9 +784,39 @@ async def get_meeting_report(meeting_id: str):
     # Create meeting dict first
     meeting_dict = dict(meeting)
     
-    # Get Candidate Name, Photo, and Duration
+    # Get reliable candidate and interviewer names from users table
+    candidate_name = None
+    interviewer_name = None
+    
+    # Get candidate info from users table using candidate_email
+    if meeting_dict.get('candidate_email'):
+        candidate_user_row = conn.execute(
+            "SELECT full_name, profile_photo_url, resume_url FROM users WHERE email = ?", 
+            (meeting_dict['candidate_email'],)
+        ).fetchone()
+        if candidate_user_row:
+            candidate_user = dict(candidate_user_row)
+            candidate_name = candidate_user['full_name']
+            if candidate_user.get('profile_photo_url'):
+                meeting_dict['candidate_photo'] = candidate_user['profile_photo_url']
+            if candidate_user.get('resume_url'):
+                meeting_dict['resume_url'] = candidate_user['resume_url']
+    
+    # Get interviewer info from users table using creator_username
+    if meeting_dict.get('creator_username'):
+        interviewer_user_row = conn.execute(
+            "SELECT full_name FROM users WHERE username = ?", 
+            (meeting_dict['creator_username'],)
+        ).fetchone()
+        if interviewer_user_row:
+            interviewer_name = interviewer_user_row['full_name']
+    
+    # Set reliable names
+    meeting_dict['candidate_name'] = candidate_name
+    meeting_dict['interviewer_name'] = interviewer_name
+    
+    # Get Candidate Session Duration from candidates table (for joined_at/left_at tracking)
     candidates = conn.execute("SELECT name, joined_at, left_at FROM candidates WHERE meeting_id = ?", (meeting_id,)).fetchall()
-    candidate_names = [c['name'] for c in candidates]
     
     # Calculate Candidate Session Duration
     candidate_duration_seconds = 0
@@ -660,22 +832,6 @@ async def get_meeting_report(meeting_id: str):
                     pass
     
     meeting_dict['candidate_duration_seconds'] = int(candidate_duration_seconds) if candidate_duration_seconds > 0 else None
-    
-    candidate_photo = None
-    
-    # Fallback: Check if a candidate user exists for this meeting (username pattern: candidate_{meeting_id})
-    candidate_row = conn.execute("SELECT full_name, resume_url, profile_photo_url FROM users WHERE username = ?", (f"candidate_{meeting_id}",)).fetchone()
-    if candidate_row:
-         candidate_user = dict(candidate_row)
-         if not candidate_names and candidate_user['full_name']:
-             candidate_names.append(candidate_user['full_name'])
-         if candidate_user.get('resume_url'):
-             meeting_dict['resume_url'] = candidate_user['resume_url']
-         if candidate_user.get('profile_photo_url'):
-             candidate_photo = candidate_user['profile_photo_url']
-    
-    meeting_dict['candidates'] = candidate_names
-    meeting_dict['candidate_photo'] = candidate_photo
     
     # Get Insights
     insights = conn.execute(
@@ -693,14 +849,29 @@ async def get_meeting_report(meeting_id: str):
         del item['emotion_json'] # Remove raw string
         insight_list.append(item)
         
+    # Get Analysis (Summary & Score)
+    analysis = None
+    try:
+        print("Executing....")
+        summary_row = conn.execute("SELECT summary, overall_score FROM meeting_summaries WHERE meeting_id = ?", (meeting_id,)).fetchone()
+        print(summary_row)
+        if summary_row:
+            analysis = {
+                "summary": summary_row["summary"],
+                "overall_score": summary_row["overall_score"]
+            }
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch analysis: {e}")
+
     conn.close()
     
     return {
         "meeting": meeting_dict,
-        "insights": insight_list
+        "insights": insight_list,
+        "analysis": analysis
     }
 
-GOOGLE_API_KEY = "AIzaSyCrrM7-ZbirYUSmUTC0Lvm0P0niskY8O3c"
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 
 async def parse_resume_with_gemini(content: bytes, mime_type: str) -> dict:
@@ -721,8 +892,8 @@ async def parse_resume_with_gemini(content: bytes, mime_type: str) -> dict:
         6. projects: array of project objects (title, description, tech_stack).
         7. education: array of education objects (degree, institution, year).
         8. achievements: array of strings.
-        9. links: object with portfolio, linkedin, instagram, etc (only if present).
-        10. others: object with any other relevant sections (languages, hobbies, etc) (only if present).
+        9. links: object with portfolio, linkedin, instagram, etc (only if present) (want to start with https://).
+        10.certificates: array of certificate objects (title, description, tech_stack).
         
         Response Format:
         {
@@ -735,7 +906,7 @@ async def parse_resume_with_gemini(content: bytes, mime_type: str) -> dict:
             "achievements": [],
             "education": [],
             "links": {},
-            "others": {}
+            "certificates": {}
         }
         """
         
@@ -834,7 +1005,7 @@ async def upload_resume(
         conn.execute("""
             UPDATE resume_data SET 
                 summary=?, personal_info=?, experience=?, skills_soft=?, skills_hard=?, 
-                projects=?, achievements=?, certifications=?, education=?, links=?, others=?, raw_json=?, updated_at=?
+                projects=?, achievements=?, certificates=?, education=?, links=?, raw_json=?, updated_at=?
             WHERE user_email=?
         """, (
             parsed_data.get('summary'),
@@ -844,10 +1015,9 @@ async def upload_resume(
             json.dumps(parsed_data.get('skills_hard')),
             json.dumps(parsed_data.get('projects')),
             json.dumps(parsed_data.get('achievements')),
-            json.dumps(parsed_data.get('certifications')),
+            json.dumps(parsed_data.get('certificates')),
             json.dumps(parsed_data.get('education')),
             json.dumps(parsed_data.get('links')),
-            json.dumps(parsed_data.get('others')),
             raw_json,
             datetime.utcnow(),
             current_user.email
@@ -856,8 +1026,8 @@ async def upload_resume(
         conn.execute("""
             INSERT INTO resume_data (
                 user_email, summary, personal_info, experience, skills_soft, skills_hard, 
-                projects, achievements, certifications, education, links, others, raw_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                projects, achievements, certificates, education, links, raw_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             current_user.email,
             parsed_data.get('summary'),
@@ -867,10 +1037,9 @@ async def upload_resume(
             json.dumps(parsed_data.get('skills_hard')),
             json.dumps(parsed_data.get('projects')),
             json.dumps(parsed_data.get('achievements')),
-            json.dumps(parsed_data.get('certifications')),
+            json.dumps(parsed_data.get('certificates')),
             json.dumps(parsed_data.get('education')),
             json.dumps(parsed_data.get('links')),
-            json.dumps(parsed_data.get('others')),
             raw_json
         ))
     
@@ -903,7 +1072,7 @@ async def get_resume_data(email: str, current_user: User = Depends(get_current_u
     data = dict(row)
     
     # Parse JSON fields
-    json_fields = ['personal_info', 'experience', 'skills_soft', 'skills_hard', 'projects', 'achievements', 'certifications', 'education', 'links', 'others']
+    json_fields = ['personal_info', 'experience', 'skills_soft', 'skills_hard', 'projects', 'achievements', 'certificates', 'education', 'links']
     for field in json_fields:
         try:
             if data.get(field):

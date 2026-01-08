@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { BACKEND_URL } from '../../config';
 import { Button } from '../../components/ui/button';
 import { ImageCropModal } from '../../components/ui/ImageCropModal';
@@ -61,10 +62,10 @@ export function SettingsPage() {
             await axios.put(`${BACKEND_URL}/auth/users/me`, {
                 full_name: fullName,
             }, { withCredentials: true });
-            alert('Settings saved!');
+            toast.success('Settings saved!');
         } catch (err) {
             console.error('Failed to save:', err);
-            alert('Failed to save settings.');
+            toast.error('Failed to save settings.');
         } finally {
             setIsSaving(false);
         }
@@ -99,7 +100,7 @@ export function SettingsPage() {
                 old_password: oldPassword,
                 new_password: newPassword
             }, { withCredentials: true });
-            alert('Password changed successfully!');
+            toast.success('Password changed successfully!');
             setOldPassword('');
             setNewPassword('');
             setConfirmPassword('');
@@ -139,7 +140,7 @@ export function SettingsPage() {
             setProfilePhoto(res.data.profile_photo_url);
         } catch (err) {
             console.error('Photo upload failed:', err);
-            alert('Failed to upload photo.');
+            toast.error('Failed to upload photo.');
         }
     };
 

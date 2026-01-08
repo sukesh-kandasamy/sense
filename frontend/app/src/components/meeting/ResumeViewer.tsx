@@ -28,10 +28,9 @@ interface ResumeData {
     skills_hard: string[];
     projects: any[];
     achievements: string[];
-    certifications: string[];
+    certificates: any[];  // Changed from certifications
     education: any[];
     links: any;
-    others: any;
 }
 
 export function ResumeViewer({ candidateEmail, onBack }: { candidateEmail: string, onBack?: () => void }) {
@@ -272,60 +271,56 @@ export function ResumeViewer({ candidateEmail, onBack }: { candidateEmail: strin
                     </section>
                 )}
 
-                {/* 6. Achievements & Certifications */}
-                {(data.certifications?.length > 0 || data.achievements?.length > 0) && (
+                {/* 6. Achievements & Certificates */}
+                {(data.certificates?.length > 0 || data.achievements?.length > 0) && (
                     <section>
                         <div className="flex items-center gap-2 mb-3 text-green-600">
                             <Award className="w-4 h-4" />
-                            <h3 className="font-semibold text-xs uppercase tracking-wider">Achievements</h3>
+                            <h3 className="font-semibold text-xs uppercase tracking-wider">Achievements & Certificates</h3>
                         </div>
-                        <ul className="space-y-1.5">
+                        <ul className="space-y-2">
                             {data.achievements?.map((ach, i) => (
                                 <li key={`ach-${i}`} className="flex gap-2 text-xs text-gray-700">
                                     <Award className="w-3.5 h-3.5 text-yellow-500 shrink-0 mt-0.5" />
                                     <span>{ach}</span>
                                 </li>
                             ))}
-                            {data.certifications?.map((cert, i) => (
-                                <li key={`cert-${i}`} className="flex gap-2 text-xs text-gray-700">
-                                    <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-                                    <span>{cert}</span>
+                            {data.certificates?.map((cert: any, i: number) => (
+                                <li key={`cert-${i}`} className="border border-gray-200 rounded-lg p-2">
+                                    <div className="flex gap-2">
+                                        <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
+                                        <div>
+                                            <span className="text-xs font-medium text-gray-900">{typeof cert === 'string' ? cert : (cert.title || cert.name)}</span>
+                                            {cert.description && <p className="text-xs text-gray-500 mt-1">{cert.description}</p>}
+                                            {cert.tech_stack && (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {(Array.isArray(cert.tech_stack) ? cert.tech_stack : [cert.tech_stack]).map((tech: string, j: number) => (
+                                                        <span key={j} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[10px] rounded">{tech}</span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </li>
                             ))}
                         </ul>
                     </section>
                 )}
 
-                {/* 7. Links & Others */}
-                {(data.links || data.others) && (
+                {/* 7. Links */}
+                {data.links && Object.keys(data.links).length > 0 && (
                     <section className="pt-4 border-t border-gray-100">
-                        {data.links && Object.keys(data.links).length > 0 && (
-                            <div className="mb-4">
-                                <h3 className="font-semibold text-xs uppercase tracking-wider text-gray-500 mb-2">Links</h3>
-                                <div className="flex flex-wrap gap-2 text-xs">
-                                    {Object.entries(data.links).map(([key, value]) => (
-                                        <a key={key} href={value as string} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded-full transition-colors text-gray-600 font-medium border border-gray-200 hover:border-blue-200">
-                                            <LinkIcon className="w-3 h-3" />
-                                            {key.replace(/_/g, ' ')}
-                                        </a>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {data.others && Object.keys(data.others).length > 0 && (
-                            <div>
-                                <h3 className="font-semibold text-xs uppercase tracking-wider text-gray-500 mb-2">Additional Info</h3>
-                                <div className="bg-gray-50 rounded p-3 text-xs text-gray-600 space-y-1">
-                                    {Object.entries(data.others).map(([key, value]) => (
-                                        <div key={key} className="flex gap-2">
-                                            <span className="font-medium text-gray-900 min-w-[60px] capitalize">{key.replace(/_/g, ' ')}:</span>
-                                            <span>{String(value)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                        <h3 className="font-semibold text-xs uppercase tracking-wider text-gray-500 mb-2">Links</h3>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                            {(Object.entries(data.links) as [string, string][])
+                                .filter(([_, value]) => value)
+                                .map(([key, value]) => (
+                                    <a key={key} href={value} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded-full transition-colors text-gray-600 font-medium border border-gray-200 hover:border-blue-200">
+                                        <LinkIcon className="w-3 h-3" />
+                                        {key.replace(/_/g, ' ')}
+                                    </a>
+                                ))}
+                        </div>
                     </section>
                 )}
             </div>

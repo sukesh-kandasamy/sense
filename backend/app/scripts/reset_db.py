@@ -1,7 +1,7 @@
 import sqlite3
 from passlib.context import CryptContext
 
-DB_NAME = "users.db"
+DB_NAME = "../users.db"
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 def get_db_connection():
@@ -33,6 +33,7 @@ def reset():
                 hashed_password TEXT,
                 profile_photo_url TEXT,
                 analysis_mode TEXT DEFAULT 'cloud',
+                role TEXT DEFAULT 'candidate',
                 disabled INTEGER DEFAULT 0
             )
         ''')
@@ -89,22 +90,27 @@ def reset():
         
         conn.commit()
         
-        # Seed default user
+        # Seed default users
         print("Seeding data...")
-        seed_email = "sukesh.kandasamy@gmail.com"
-        seed_password = "sample@123"
         
-        hashed_pw = pwd_context.hash(seed_password)
-        conn.execute(
-            "INSERT INTO users (username, email, full_name, hashed_password) VALUES (?, ?, ?, ?)",
-            (seed_email, seed_email, "Sukesh Kandasamy", hashed_pw)
-        )
+        # (email, password, full_name, role)
+        users_to_seed = [
+            ("tom.cruise@sense.com", "tomcruise123", "Tom Cruise", "candidate"),
+            ("trishna.krishnan@sense.com", "trisha123", "Trishna Krishnan", "interviewer")
+        ]
+        
+        for email, password, full_name, role in users_to_seed:
+            hashed_pw = pwd_context.hash(password)
+            conn.execute(
+                "INSERT INTO users (username, email, full_name, hashed_password, role) VALUES (?, ?, ?, ?, ?)",
+                (email, email, full_name, hashed_pw, role)
+            )
 
         conn.commit()
         conn.close()
         print("✓ Database reset complete.")
         print(f"  - Created tables: users, meetings, candidates, sessions, insights")
-        print(f"  - Seeded user: {seed_email}")
+        print(f"  - Seeded users: tom.cruise@sense.com (candidate), trishna.krishnan@sense.com (interviewer)")
         
     except Exception as e:
         print(f"✗ Error resetting DB: {e}")

@@ -16,7 +16,9 @@ import {
     Cog,
     Clock,
     TrendingUp,
-    Mail
+    Mail,
+    MessageCircle,
+    Check
 } from 'lucide-react';
 
 interface Meeting {
@@ -25,6 +27,9 @@ interface Meeting {
     created_at: string;
     active: boolean;
     duration?: number;
+    candidate_name?: string;
+    candidate_profile_photo_url?: string;
+    candidate_email?: string;
 }
 
 export function SetupPage() {
@@ -43,6 +48,11 @@ export function SetupPage() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [candidateEmail, setCandidateEmail] = useState('');
     const [createError, setCreateError] = useState<string | null>(null);
+
+    // Multi-select and share state
+    const [selectedMeetings, setSelectedMeetings] = useState<Set<string>>(new Set());
+    const [shareDropdownId, setShareDropdownId] = useState<string | null>(null);
+    const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -118,6 +128,73 @@ export function SetupPage() {
         setTimeout(() => setCopiedId(null), 2000);
     };
 
+    const getMeetingLink = (id: string) => `${window.location.origin}/auth/candidate/login?access_code=${id.toUpperCase()}`;
+
+    const shareOnWhatsApp = (id: string) => {
+        const link = getMeetingLink(id);
+        const message = `You are invited to an interview. Join here: ${link}`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+        setShareDropdownId(null);
+    };
+
+    const shareViaEmail = (meeting: Meeting) => {
+        const link = getMeetingLink(meeting.id);
+        const subject = 'Interview Invitation';
+        const body = `You are invited to an interview.\n\nJoin here: ${link}`;
+        const recipient = meeting.candidate_email || '';
+        window.open(`mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+        setShareDropdownId(null);
+    };
+
+    const toggleMeetingSelection = (id: string) => {
+        setSelectedMeetings(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    };
+
+    const handleDeleteSelected = async () => {
+        if (selectedMeetings.size === 0) return;
+        setIsDeleting(true);
+        try {
+            await axios.post(`${BACKEND_URL}/auth/meetings/delete`, {
+                ids: Array.from(selectedMeetings)
+            }, {
+                withCredentials: true
+            });
+            setMeetings(prev => prev.filter(m => !selectedMeetings.has(m.id)));
+            setSelectedMeetings(new Set());
+        } catch (err) {
+            console.error('Failed to delete meetings:', err);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const handleDeleteAll = async () => {
+        setIsDeleting(true);
+        try {
+            const allIds = meetings.map(m => m.id);
+            await axios.post(`${BACKEND_URL}/auth/meetings/delete`, {
+                ids: allIds
+            }, {
+                withCredentials: true
+            });
+            setMeetings([]);
+            setSelectedMeetings(new Set());
+            setShowDeleteAllModal(false);
+        } catch (err) {
+            console.error('Failed to delete all meetings:', err);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#F8F9FA] font-sans">
             {/* Delete Confirmation Modal */}
@@ -155,6 +232,41 @@ export function SetupPage() {
                 </div>
             )}
 
+            {/* Delete All Confirmation Modal */}
+            {showDeleteAllModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+                    <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+                        <div className="flex items-start gap-4">
+                            <div className="p-2 bg-red-100 rounded-full">
+                                <AlertTriangle className="w-6 h-6 text-red-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-gray-900">Delete All Meetings</h3>
+                                <p className="text-sm text-gray-500 mt-1">Are you sure you want to delete all {meetings.length} meetings? This action cannot be undone.</p>
+                            </div>
+                            <button onClick={() => setShowDeleteAllModal(false)} className="text-gray-400 hover:text-gray-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setShowDeleteAllModal(false)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteAll}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete All'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Create Meeting Modal - Candidate Email */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
@@ -178,7 +290,7 @@ export function SetupPage() {
                                 value={candidateEmail}
                                 onChange={(e) => setCandidateEmail(e.target.value)}
                                 placeholder="candidate@example.com"
-        
+
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                             />
                             {createError && (
@@ -254,7 +366,7 @@ export function SetupPage() {
                                     Get started by creating a new meeting room for your upcoming interviews.
                                 </p>
                                 <button
-                                    onClick={handleCreateMeeting}
+                                    onClick={() => { setShowCreateModal(true); setCreateError(null); setCandidateEmail(''); }}
                                     disabled={isCreating}
                                     className="px-6 py-2.5 text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                                 >
@@ -263,109 +375,167 @@ export function SetupPage() {
                             </div>
                         ) : (
                             /* Meetings List - Google Material Design Style */
-                            <div className="space-y-3">
+                            <div className="space-y-1">
+                                {/* Bulk Action Bar */}
+                                {selectedMeetings.size > 0 && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+                                        <span className="text-sm font-medium text-blue-700">
+                                            {selectedMeetings.size} meeting{selectedMeetings.size > 1 ? 's' : ''} selected
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setSelectedMeetings(new Set())}
+                                                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleDeleteSelected}
+                                                disabled={isDeleting}
+                                                className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                                Delete Selected
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Delete All Button */}
+                                {meetings.length > 1 && selectedMeetings.size === 0 && (
+                                    <div className="flex justify-end mb-3">
+                                        <button
+                                            onClick={() => setShowDeleteAllModal(true)}
+                                            className="text-sm text-gray-500 hover:text-red-600 transition-colors flex items-center gap-1"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            Delete All
+                                        </button>
+                                    </div>
+                                )}
+
                                 {meetings.map((meeting) => (
                                     <div
                                         key={meeting.id}
-                                        className="group bg-white rounded-xl border border-gray-200/80 hover:border-gray-300 hover:shadow-lg transition-all duration-300 overflow-hidden"
+                                        className={`group bg-white border rounded-lg transition-all duration-200 ${selectedMeetings.has(meeting.id) ? 'border-blue-300 bg-blue-50/30' : 'border-gray-100'}`}
                                     >
                                         <div className="p-3 sm:p-4">
-                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                                                {/* Icon with status indicator */}
-                                                <div className="flex items-center gap-3 sm:gap-4">
-                                                    <div className="relative">
-                                                        <div className={`p-2.5 sm:p-3 rounded-xl ${meeting.active ? 'bg-blue-50' : 'bg-gray-50'}`}>
-                                                            <Video className={`w-4 h-4 sm:w-5 sm:h-5 ${meeting.active ? 'text-blue-600' : 'text-gray-400'}`} />
-                                                        </div>
-                                                        {meeting.active && (
-                                                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full border-2 border-white" />
+                                            <div className="flex items-center gap-3 sm:gap-4">
+                                                {/* Checkbox */}
+                                                <button
+                                                    onClick={() => toggleMeetingSelection(meeting.id)}
+                                                    className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${selectedMeetings.has(meeting.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300 hover:border-blue-500'}`}
+                                                >
+                                                    {selectedMeetings.has(meeting.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                                                </button>
+
+                                                {/* Avatar */}
+                                                <div className="relative shrink-0">
+                                                    <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center border border-gray-200 ${meeting.candidate_profile_photo_url ? '' : 'bg-gray-100'}`}>
+                                                        {meeting.candidate_profile_photo_url ? (
+                                                            <img
+                                                                src={`${BACKEND_URL}${meeting.candidate_profile_photo_url}`}
+                                                                alt={meeting.candidate_name || 'Candidate'}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        ) : (
+                                                            <Video className={`w-5 h-5 ${meeting.active ? 'text-blue-600' : 'text-gray-400'}`} />
                                                         )}
                                                     </div>
+                                                    {meeting.active && (
+                                                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
+                                                    )}
+                                                </div>
 
-                                                    {/* Meeting Info */}
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1">
-                                                            <h3 className="text-sm sm:text-base font-semibold text-gray-900 tracking-wide font-mono">
-                                                                {meeting.id.toUpperCase()}
-                                                            </h3>
-                                                            <span className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-medium ${meeting.active
-                                                                ? 'bg-green-100 text-green-700 ring-1 ring-inset ring-green-600/20'
-                                                                : 'bg-gray-100 text-gray-600'
-                                                                }`}>
-                                                                {meeting.active ? '● Active' : 'Finished'}
+                                                {/* Meeting Info */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <h3 className="text-sm font-medium text-gray-900 truncate">
+                                                            {meeting.candidate_name || meeting.id.toUpperCase()}
+                                                        </h3>
+                                                        {!meeting.active && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                                                Finished
                                                             </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                                                        <div className="flex items-center gap-1">
+                                                            <Calendar className="w-3 h-3" />
+                                                            <span>{new Date(meeting.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                                         </div>
-                                                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                                                <span>{new Date(meeting.created_at).toLocaleDateString('en-US', {
-                                                                    month: 'short',
-                                                                    day: 'numeric',
-                                                                    year: 'numeric'
-                                                                })}</span>
+                                                        {meeting.duration && (
+                                                            <div className="flex items-center gap-1">
+                                                                <Clock className="w-3 h-3" />
+                                                                <span>{meeting.duration} min</span>
                                                             </div>
-                                                            {meeting.duration && (
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                                                    <span>{meeting.duration} min</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                        )}
                                                     </div>
                                                 </div>
 
-                                                {/* Actions */}
-                                                <div className="flex items-center gap-1.5 sm:gap-2 mt-3 sm:mt-0 ml-auto sm:ml-0">
-                                                    {meeting.active && (
-                                                        <>
-                                                            <button
-                                                                onClick={() => navigate(`/interviewer/meeting/${meeting.id}/setup`)}
-                                                                className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                                                                title="Configure"
-                                                            >
-                                                                <Cog className="w-4 h-4" />
-                                                            </button>
-
-                                                            <button
-                                                                onClick={() => copyMeetingLink(meeting.id)}
-                                                                className={`p-1.5 sm:p-2 rounded-lg transition-all ${copiedId === meeting.id
-                                                                    ? 'text-green-600 bg-green-50'
-                                                                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                                                                    }`}
-                                                                title="Share"
-                                                            >
-                                                                {copiedId === meeting.id ? <CheckCircle className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                                                            </button>
-                                                        </>
-                                                    )}
-
+                                                {/* Actions - Grid for perfect alignment */}
+                                                <div className="grid grid-cols-[40px_1px_40px_auto] items-center gap-1 shrink-0">
+                                                    {/* Delete - Column 1 */}
                                                     <button
                                                         onClick={() => setDeleteModalId(meeting.id)}
-                                                        className="p-1.5 sm:p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                        className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                         title="Delete"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
 
-                                                    <div className="w-px h-5 sm:h-6 bg-gray-200 mx-0.5 sm:mx-1" />
+                                                    {/* Divider - Column 2 */}
+                                                    <div className="w-px h-5 bg-gray-200" />
 
+                                                    {/* Share - Column 3 */}
+                                                    {meeting.active ? (
+                                                        <div className="relative w-10 h-10 flex items-center justify-center">
+                                                            <button
+                                                                onClick={() => setShareDropdownId(shareDropdownId === meeting.id ? null : meeting.id)}
+                                                                className="w-10 h-10 flex items-center justify-center text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                title="Share"
+                                                            >
+                                                                <Share2 className="w-4 h-4" />
+                                                            </button>
+                                                            {shareDropdownId === meeting.id && (
+                                                                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 w-48">
+                                                                    <button
+                                                                        onClick={() => shareOnWhatsApp(meeting.id)}
+                                                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                                                    >
+                                                                        <MessageCircle className="w-4 h-4 text-green-600" />
+                                                                        Share on WhatsApp
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => shareViaEmail(meeting)}
+                                                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                                                    >
+                                                                        <Mail className="w-4 h-4 text-blue-600" />
+                                                                        Share via Email
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-10 h-10" /> /* Placeholder for alignment */
+                                                    )}
+
+                                                    {/* Primary Action - Column 4 */}
                                                     {meeting.active ? (
                                                         <button
                                                             onClick={() => navigate(`/meeting/${meeting.id}`)}
-                                                            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-900 hover:bg-black text-white rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md flex items-center gap-1.5 sm:gap-2"
+                                                            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 justify-center min-w-[120px]"
                                                         >
-                                                            <span className="hidden xs:inline">Join</span>
-                                                            <span className="xs:hidden">Join</span>
-                                                            <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                                            Join
+                                                            <ArrowRight className="w-4 h-4" />
                                                         </button>
                                                     ) : (
                                                         <button
                                                             onClick={() => navigate(`/interviewer/report/${meeting.id}`)}
-                                                            className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-all hover:shadow-md flex items-center gap-1.5 sm:gap-2"
+                                                            className="px-4 py-1.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 justify-center min-w-[120px]"
                                                         >
-                                                            <span className="hidden sm:inline">View Insights</span>
-                                                            <span className="sm:hidden">Insights</span>
-                                                            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                                            View Insights
+                                                            <TrendingUp className="w-4 h-4" />
                                                         </button>
                                                     )}
                                                 </div>

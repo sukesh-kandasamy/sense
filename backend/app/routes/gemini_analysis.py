@@ -24,7 +24,7 @@ load_dotenv()
 router = APIRouter()
 
 # --- Gemini Configuration ---
-GOOGLE_API_KEY = "AIzaSyCrrM7-ZbirYUSmUTC0Lvm0P0niskY8O3c"
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 MODEL = "gemini-2.5-flash"  # Using Gemini 2.5 Flash
 
 
@@ -49,13 +49,15 @@ Objective: Analyze candidate emotions during video interviews to provide intervi
     "relief": 0-100,
     "excitement": 0-100,
     "neutral": 0-100
-  }
+  },
+  "reasoning": "Brief explanation of why this dominant emotion and confidence level were detected (max 2 sentences)."
 }
 
 **Instructions:**
 - **dominant_emotion**: Choose the single most prominent emotion.
 - **confident_meter**: Overall confidence score (0-100).
 - **emotion_meter**: A breakdown of specific emotional components. Values should roughly sum to 100 or reflect relative intensity.
+- **reasoning**: Explain the physical indicators (facial expressions, voice tone, body language) that led to the conclusion. Example: "The candidate's furrowed brow and fidgeting suggest anxiety, while their shaky voice confirms low confidence."
 - Respond ONLY with valid JSON (no markdown, no explanation).
 """
 
@@ -106,13 +108,26 @@ class EmotionAnalysisManager:
         self.candidate_connections[room_id] = websocket
         print(f"[EMOTION] Candidate connected for analysis in room '{room_id}'")
     
-    def disconnect_interviewer(self, websocket: WebSocket, room_id: str):
-        """Disconnect an interviewer."""
+    async def disconnect_interviewer(self, websocket: WebSocket, room_id: str):
+        """Disconnect an interviewer. If no interviewers remain, stop the candidate's analysis."""
         if room_id in self.interviewer_connections:
             if websocket in self.interviewer_connections[room_id]:
                 self.interviewer_connections[room_id].remove(websocket)
             if not self.interviewer_connections[room_id]:
                 del self.interviewer_connections[room_id]
+                # No interviewers left - stop the candidate's emotion analysis
+                if room_id in self.candidate_connections:
+                    try:
+                        candidate_ws = self.candidate_connections[room_id]
+                        await candidate_ws.close(code=1000, reason="Interviewer disconnected")
+                        print(f"[EMOTION] Stopped candidate analysis for room '{room_id}' - Interviewer left")
+                    except Exception as e:
+                        print(f"[EMOTION] Error closing candidate connection: {e}")
+                    finally:
+                        self.disconnect_candidate(room_id)
+                # Clean up latest emotions data for this room
+                if room_id in self.latest_emotions:
+                    del self.latest_emotions[room_id]
         print(f"[EMOTION] Interviewer disconnected from room '{room_id}'")
     
     def disconnect_candidate(self, room_id: str):
@@ -135,10 +150,35 @@ class EmotionAnalysisManager:
                 ist = timezone(timedelta(hours=5, minutes=30))
                 ist_timestamp = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
                 
+                # Extract request timestamp
+                request_timestamp_dt = emotion_data.pop("_request_timestamp", None)
+                request_timestamp_str = request_timestamp_dt.strftime('%Y-%m-%d %H:%M:%S') if request_timestamp_dt else None
+                
                 conn = get_db_connection()
+                
+                # Calculate relative seconds
+                relative_seconds = 0
+                if request_timestamp_dt:
+                    meeting = conn.execute("SELECT started_at, created_at FROM meetings WHERE id = ?", (room_id,)).fetchone()
+                    if meeting:
+                        start_time_str = meeting['started_at'] or meeting['created_at']
+                        if start_time_str:
+                            try:
+                                # Robust parsing for DB timestamps (UTC is default)
+                                start_dt = datetime.fromisoformat(str(start_time_str).replace(' ', 'T'))
+                                if start_dt.tzinfo is None:
+                                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                                
+                                # Convert request time to UTC for diff
+                                req_utc = request_timestamp_dt.astimezone(timezone.utc)
+                                diff = (req_utc - start_dt).total_seconds()
+                                relative_seconds = int(max(0, diff))
+                            except Exception as e:
+                                print(f"[EMOTION] Relative time calc error: {e}")
+
                 conn.execute(
-                    "INSERT INTO insights (meeting_id, timestamp, emotion_json, smart_nudge) VALUES (?, ?, ?, ?)",
-                    (room_id, ist_timestamp, json.dumps(emotion_data), emotion_data.get("smart_nudge", ""))
+                    "INSERT INTO insights (meeting_id, timestamp, emotion_json, smart_nudge, request_timestamp, relative_seconds) VALUES (?, ?, ?, ?, ?, ?)",
+                    (room_id, ist_timestamp, json.dumps(emotion_data), emotion_data.get("smart_nudge", ""), request_timestamp_str, relative_seconds)
                 )
                 conn.commit()
                 conn.close()
@@ -157,7 +197,7 @@ class EmotionAnalysisManager:
             
             # Clean up disconnected sockets
             for ws in disconnected:
-                self.disconnect_interviewer(ws, room_id)
+                await self.disconnect_interviewer(ws, room_id)
     
     async def analyze_multimodal(self, room_id: str, frame_data: str, audio_data: Optional[str] = None) -> Optional[dict]:
         """
@@ -168,9 +208,16 @@ class EmotionAnalysisManager:
             frame_data: Base64 encoded JPEG image (representative frame)
             audio_data: Base64 encoded WAV audio (7 seconds of audio)
         """
+        # Capture IST timestamp at the start of the request
+        from datetime import datetime, timezone, timedelta
+        ist = timezone(timedelta(hours=5, minutes=30))
+        request_timestamp_dt = datetime.now(ist)
+
         if not self.genai_client:
             print("[GEMINI] No API key configured, using mock data")
-            return self._generate_mock_emotion()
+            res = self._generate_mock_emotion()
+            res["_request_timestamp"] = request_timestamp_dt
+            return res
         
         try:
             from google.genai import types
@@ -254,11 +301,16 @@ class EmotionAnalysisManager:
                 emotion_data["confidence"] = emotion_data.get("engagement_score", 7) * 10
             
             print(f"[GEMINI] ✓ Sentiment: {emotion_data.get('primary')} | Confidence: {emotion_data.get('confidence')}% | Priority: {emotion_data.get('smart_nudge_priority', 'N/A')}")
+            
+            # Inject request timestamp
+            emotion_data["_request_timestamp"] = request_timestamp_dt
             return emotion_data
             
         except Exception as e:
             print(f"[GEMINI] ✗ Analysis failed: {e}")
-            return self._generate_mock_emotion()
+            res = self._generate_mock_emotion()
+            res["_request_timestamp"] = request_timestamp_dt
+            return res
     
     def _generate_mock_emotion(self) -> dict:
         """Generate mock emotion data for testing without API key."""
@@ -278,11 +330,20 @@ class EmotionAnalysisManager:
             "relief": random.randint(0, 20),
             "excitement": random.randint(0, 40)
         }
+
+        # Generate mock reasoning
+        reasoning_templates = [
+            f"The candidate's suppressed smile and clear voice tone suggest they are feeling {dominant_emotion}.",
+            f"Observed some fidgeting, but overall the candidate maintains eye contact, indicating {dominant_emotion} behavior.",
+            f"Facial micro-expressions align with {dominant_emotion}, supported by a steady speaking pace.",
+            f"The candidate's posture is relaxed, reinforcing the detection of {dominant_emotion}."
+        ]
         
         return {
             "dominant_emotion": dominant_emotion,
             "confident_meter": confidence,
-            "emotion_meter": emotion_meter
+            "emotion_meter": emotion_meter,
+            "reasoning": random.choice(reasoning_templates)
         }
 
 
@@ -413,10 +474,10 @@ async def insights_endpoint(websocket: WebSocket, room_id: str, user: User = Dep
                 await websocket.send_json({"type": "pong"})
                 
     except WebSocketDisconnect:
-        emotion_manager.disconnect_interviewer(websocket, room_id)
+        await emotion_manager.disconnect_interviewer(websocket, room_id)
     except Exception as e:
         print(f"[EMOTION] Error in interviewer connection: {e}")
-        emotion_manager.disconnect_interviewer(websocket, room_id)
+        await emotion_manager.disconnect_interviewer(websocket, room_id)
 
 
 @router.get("/emotion/status")

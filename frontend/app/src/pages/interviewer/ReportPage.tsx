@@ -302,8 +302,9 @@ export function ReportPage() {
                             ? formatTime(data.meeting.video_duration_seconds)
                             : (data.meeting.duration ? `${data.meeting.duration} mins` : "Unknown"),
                         videoDurationSeconds: data.meeting.video_duration_seconds || 0,
-                        candidateDuration: data.meeting.candidate_duration_seconds
-                            ? formatTime(data.meeting.candidate_duration_seconds)
+                        // Use video duration as the attended time (most reliable)
+                        candidateDuration: data.meeting.video_duration_seconds
+                            ? formatTime(data.meeting.video_duration_seconds)
                             : "N/A",
                         // Map analysis data if available
                         overallScore: data.analysis?.overall_score || "N/A",
@@ -436,11 +437,12 @@ export function ReportPage() {
 
             <main className="max-w-[1600px] mx-auto p-6 space-y-6">
 
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 h-[calc(100vh-140px)]">
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 h-auto xl:h-[calc(100vh-140px)]">
 
                     {/* Left Panel: Video Player (Takes up 2 cols) */}
                     <div className="xl:col-span-2 flex flex-col gap-6">
-                        <div className="bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 flex-1 relative group">
+                        {/* On tablet (md/lg), use aspect-video for proper sizing. On xl+, use flex-1 */}
+                        <div className="bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 relative group aspect-video xl:aspect-auto xl:flex-1">
                             <CustomVideoPlayer
                                 src={reportData.videoUrl}
                                 totalDuration={reportData.videoDurationSeconds}

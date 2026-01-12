@@ -30,3 +30,5 @@ uploads/
 
 # Certificates (sensitive)
 certs/
+
+.gitignore
